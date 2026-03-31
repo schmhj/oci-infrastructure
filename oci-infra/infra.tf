@@ -186,6 +186,19 @@ resource "oci_containerengine_cluster" "k8s_cluster" {
   }
 }
 
+data "oci_containerengine_node_pool_option" "oke_node_pool_options" {
+  node_pool_option_id = "all"
+  compartment_id      = var.compartment_id
+}
+
+locals {
+  latest_oke_image_id = [
+    for source in data.oci_containerengine_node_pool_option.oke_node_pool_options.sources :
+    source.image_id
+    if can(regex(trimprefix(var.kubernetes_version, "v"), source.source_name)) && can(regex("aarch64", source.source_name))
+  ][0]
+}
+
 data "oci_identity_availability_domains" "ads" {
   compartment_id = var.compartment_id
 }
@@ -218,14 +231,8 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
     ocpus         = 2
   }
 
-  /*
-    OS: Oracle-Linux-10.1-aarch64-2026.02.28-0
-    Image ID: ocid1.image.oc1.iad.aaaaaaaa4c6yebvwdyv44ggynzkiq4ostfomzkwkadnvy3yxbkwwkhq32caa
-    https://docs.oracle.com/en-us/iaas/images/oracle-linux-10x/oracle-linux-10-1-aarch64-2026-02-28-0.htm  
-  */
-  
   node_source_details {
-    image_id    = "ocid1.image.oc1.iad.aaaaaaaa4c6yebvwdyv44ggynzkiq4ostfomzkwkadnvy3yxbkwwkhq32caa"
+    image_id    = local.latest_oke_image_id
     source_type = "image"
   }
 
@@ -238,7 +245,7 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
 
 resource "oci_artifacts_container_repository" "docker_repository" {
   compartment_id = var.compartment_id
-  display_name   = "kubernetes-nginx"
+  display_name   = "kubernetes-repo"
 
   is_immutable = false
   is_public    = false
