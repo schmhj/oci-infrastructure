@@ -31,8 +31,8 @@ resource "helm_release" "argocd" {
       value = "NodePort"
     },
     {
-      name  = "server.service.nodePortHttp"
-      value = "31600"
+      name  = "server.service.nodePortHttps"
+      value = "30443"
     }
   ]
 
@@ -73,7 +73,7 @@ resource "oci_network_load_balancer_backend" "nlb_backend" {
   count                    = length(local.active_nodes)
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
-  port                     = 31600
+  port                     = 30443
   target_id                = local.active_nodes[count.index].id
 }
 
@@ -81,6 +81,6 @@ resource "oci_network_load_balancer_listener" "nlb_listener" {
   default_backend_set_name = oci_network_load_balancer_backend_set.nlb_backend_set.name
   name                     = "k8s-nlb-listener"
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
-  port                     = "80"
+  port                     = "443"
   protocol                 = "TCP"
 }

@@ -69,8 +69,8 @@ resource "oci_core_security_list" "private_subnet_sl" {
     source_type = "CIDR_BLOCK"
     protocol    = "6"
     tcp_options {
-      min = 31600
-      max = 31600
+      min = 30443
+      max = 30443
     }
   }
 }
@@ -94,8 +94,8 @@ resource "oci_core_security_list" "public_subnet_sl" {
     destination_type = "CIDR_BLOCK"
     protocol         = "6"
     tcp_options {
-      min = 31600
-      max = 31600
+      min = 30443
+      max = 30443
     }
   }
 
@@ -117,8 +117,8 @@ resource "oci_core_security_list" "public_subnet_sl" {
     stateless   = false
 
     tcp_options {
-      max = 80
-      min = 80
+      max = 443
+      min = 443
     }
   } 
 
