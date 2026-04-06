@@ -29,3 +29,33 @@ variable "allow_destroy" {
   description = "allow destory flag"
   default     = "false"
 }
+
+variable "tenancy_ocid" {
+  type        = string
+  description = "OCI tenancy OCID (used for remote runs)"
+  default     = ""
+}
+
+variable "user_ocid" {
+  type        = string
+  description = "OCI user OCID (used for remote runs)"
+  default     = ""
+}
+
+variable "fingerprint" {
+  type        = string
+  description = "OCI API key fingerprint (used for remote runs)"
+  default     = ""
+}
+
+variable "private_key" {
+  type        = string
+  description = "OCI API private key contents (PEM) - set as sensitive in remote workspace"
+  default     = ""
+}
+
+variable "oci_config_profile" {
+  type        = string
+  description = "Optional OCI config profile name (falls back to DEFAULT)"
+  default     = ""
+}
