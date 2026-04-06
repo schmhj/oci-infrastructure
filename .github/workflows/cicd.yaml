@@ -30,7 +30,6 @@ jobs:
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
       TF_VAR_project : ${{ vars.TF_VAR_project }}
       TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_VAR_TF_CLOUD_TOKEN: ${{ vars.TF_CLOUD_TOKEN }}
       TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
       TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
       TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
@@ -99,7 +98,6 @@ jobs:
       TF_VAR_public_subnet_id: ${{ vars.TF_VAR_public_subnet_id }}
       TF_VAR_project : ${{ vars.TF_VAR_project }}
       TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_VAR_TF_CLOUD_TOKEN: ${{ vars.TF_CLOUD_TOKEN }}
       TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
       TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
       TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
@@ -176,7 +174,6 @@ jobs:
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
       TF_VAR_project : ${{ vars.TF_VAR_project }}
       TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_VAR_TF_CLOUD_TOKEN: ${{ vars.TF_CLOUD_TOKEN }}
       TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
       TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
       TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
@@ -234,7 +231,6 @@ jobs:
       TF_VAR_public_subnet_id: ${{ needs.apply-oci-infra.outputs.public_subnet_id }}
       TF_VAR_project : ${{ vars.TF_VAR_project }}
       TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_VAR_TF_CLOUD_TOKEN: ${{ vars.TF_CLOUD_TOKEN }}
       TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
       TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
       TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
