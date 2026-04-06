@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-
-    env:
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_project : ${{ vars.TF_VAR_project }}

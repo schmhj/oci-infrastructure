@@ -33,7 +33,6 @@ jobs:
       TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
       TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
       TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
-      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
     steps:
       - name: Checkout
@@ -64,6 +63,8 @@ jobs:
       - name: Terraform Plan
         id: plan
         working-directory: oci-infra
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
         run: |
           terraform plan -no-color 2>&1 | tee plan.txt
           echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
@@ -79,7 +80,7 @@ jobs:
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: context.issue.number,∆
               body
             });
 
