@@ -28,6 +28,8 @@ jobs:
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -89,6 +91,8 @@ jobs:
       # These are stored as GitHub Variables after the first apply
       TF_VAR_node_pool_id: ${{ vars.TF_VAR_node_pool_id }}
       TF_VAR_public_subnet_id: ${{ vars.TF_VAR_public_subnet_id }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -158,6 +162,8 @@ jobs:
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -207,6 +213,8 @@ jobs:
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
       TF_VAR_node_pool_id: ${{ needs.apply-oci-infra.outputs.node_pool_id }}
       TF_VAR_public_subnet_id: ${{ needs.apply-oci-infra.outputs.public_subnet_id }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
