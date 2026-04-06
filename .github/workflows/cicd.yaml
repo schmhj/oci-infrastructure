@@ -1,4 +1,4 @@
-name: Deploy Infrastructure
+name: OKE Cluster Deploy Infrastructure
 
 on:
   push:
