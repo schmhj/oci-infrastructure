@@ -23,3 +23,9 @@ variable "kubernetes_version" {
   description = "Kubernetes version"
   default     = "v1.31.10"
 }
+
+variable "allow_destroy" {
+  type        = string
+  description = "allow destory flag"
+  default     = "false"
+}

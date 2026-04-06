@@ -19,18 +19,39 @@ jobs:
     environment: production
     runs-on: ubuntu-latest
 
+    env:
+      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
+      TF_VAR_allow_destroy: "${{ github.event.inputs.allow_destroy }}"
+
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup OCI credentials
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
+          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_wrapper: false
 
       - name: Terraform Init
         working-directory: oci-infra
-        run: terraform init -input=false
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+        run: |
+          terraform init -input=false \
+            -backend-config="hostname=app.terraform.io" \
+            -backend-config="organization=${{ vars.TF_CLOUD_ORG }}" \
+            -backend-config="workspaces.name=${{ vars.TF_CLOUD_WORKSPACE_OCI }}"
 
       - name: Verify explicit confirmation and expected cluster
         working-directory: oci-infra
