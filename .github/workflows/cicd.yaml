@@ -25,14 +25,12 @@ jobs:
       pull-requests: write
 
     env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
-      TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
-      TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
+      TF_VAR_project: ${{ vars.TF_VAR_project }}
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -42,12 +40,6 @@ jobs:
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -92,18 +84,15 @@ jobs:
       pull-requests: write
 
     env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
       # These are stored as GitHub Variables after the first apply
       TF_VAR_node_pool_id: ${{ vars.TF_VAR_node_pool_id }}
       TF_VAR_public_subnet_id: ${{ vars.TF_VAR_public_subnet_id }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-      TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
-      TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
-      TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
+      TF_VAR_project: ${{ vars.TF_VAR_project }}
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -112,19 +101,6 @@ jobs:
           repository: schmhj/oci-infrastructure
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
           fetch-depth: 0
-
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-
-      - name: Setup kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -172,15 +148,12 @@ jobs:
       public_subnet_id: ${{ steps.outputs.outputs.public_subnet_id }}
 
     env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-      TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
-      TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
-      TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
+      TF_VAR_project: ${{ vars.TF_VAR_project }}
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
 
 
     steps:
@@ -191,12 +164,6 @@ jobs:
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -228,17 +195,14 @@ jobs:
     needs: apply-oci-infra
 
     env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
       TF_VAR_region: ${{ vars.TF_VAR_region }}
       TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
       TF_VAR_node_pool_id: ${{ needs.apply-oci-infra.outputs.node_pool_id }}
       TF_VAR_public_subnet_id: ${{ needs.apply-oci-infra.outputs.public_subnet_id }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-      TF_VAR_TF_CLOUD_ORG: ${{ vars.TF_CLOUD_ORG }}
-      TF_VAR_TF_CLOUD_WORKSPACE_OCI: ${{ vars.TF_CLOUD_WORKSPACE_OCI }}
-      TF_VAR_TF_CLOUD_WORKSPACE_K8S: ${{ vars.TF_CLOUD_WORKSPACE_K8S }}
+      TF_VAR_project: ${{ vars.TF_VAR_project }}
+      TF_VAR_env: ${{ vars.TF_VAR_env }}
 
     steps:
       - name: Checkout
@@ -248,30 +212,6 @@ jobs:
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-
-      - name: Install OCI CLI
-        run: |
-          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh \
-            --output install.sh
-          bash install.sh --accept-all-defaults
-          echo "$HOME/bin" >> $GITHUB_PATH
-          echo "$HOME/lib/oracle-cli/bin" >> $GITHUB_PATH
-
-      - name: Generate kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          oci ce cluster create-kubeconfig \
-            --cluster-id ${{ needs.apply-oci-infra.outputs.cluster_id }} \
-            --file ~/.kube/config \
-            --region ${{ vars.TF_VAR_region }} \
-            --token-version 2.0.0 \
-            --kube-endpoint PUBLIC_ENDPOINT
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
