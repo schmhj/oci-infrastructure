@@ -12,6 +12,30 @@ provider "oci" {
   config_file_profile = "DEFAULT"
 }
 
+locals {
+  base_name = "${var.project}-${var.env}-${var.region}"
+
+  prefixes = {
+    vcn      = "vcn"
+    snet_pub = "snet-pub"
+    snet_priv= "snet-priv"
+    oke      = "oke"
+    np       = "np"
+    nsg      = "nsg"
+    nlb      = "nlb"
+    repo     = "container-repo"
+  }
+
+  name_vcn      = "${local.prefixes.vcn}-${var.project}-${var.env}-${var.region}"
+  name_snet_pub = "${local.prefixes.snet_pub}-${var.project}-${var.env}-${var.region}"
+  name_snet_priv= "${local.prefixes.snet_priv}-${var.project}-${var.env}-${var.region}"
+  name_oke      = "${local.prefixes.oke}-${var.project}-${var.env}-${var.region}"
+  name_np       = "${local.prefixes.np}-${var.project}-${var.env}-${var.region}"
+  name_nsg      = "${local.prefixes.nsg}-${var.project}-${var.env}-${var.region}"
+  name_nlb      = "${local.prefixes.nlb}-${var.project}-${var.env}-${var.region}"
+  name_repo     = "${local.prefixes.repo}-${var.project}-${var.env}-${var.region}"
+}
+
 module "vcn" {
   source  = "oracle-terraform-modules/vcn/oci"
   version = "3.6.0"
@@ -23,8 +47,8 @@ module "vcn" {
   local_peering_gateways       = null
   nat_gateway_route_rules      = null
 
-  vcn_name      = "k8s-vcn"
-  vcn_dns_label = "k8svcn"
+  vcn_name      = local.name_vcn
+  vcn_dns_label = lower(replace(local.name_vcn, "_", "-"))
   vcn_cidrs     = ["10.0.0.0/16"]
 
   create_internet_gateway = true
@@ -36,7 +60,7 @@ resource "oci_core_security_list" "private_subnet_sl" {
   compartment_id = var.compartment_id
   vcn_id         = module.vcn.vcn_id
 
-  display_name = "k8s-private-subnet-sl"
+  display_name = "${local.name_nsg}-private-subnet-sl"
 
   egress_security_rules {
     stateless        = false
@@ -79,7 +103,7 @@ resource "oci_core_security_list" "public_subnet_sl" {
   compartment_id = var.compartment_id
   vcn_id         = module.vcn.vcn_id
 
-  display_name = "k8s-public-subnet-sl"
+  display_name = "${local.name_nsg}-public-subnet-sl"
 
   egress_security_rules {
     stateless        = false
@@ -148,7 +172,7 @@ resource "oci_core_subnet" "vcn_private_subnet" {
 
   route_table_id             = module.vcn.nat_route_id
   security_list_ids          = [oci_core_security_list.private_subnet_sl.id]
-  display_name               = "k8s-private-subnet"
+  display_name               = local.name_snet_priv
   prohibit_public_ip_on_vnic = true
 }
 
@@ -159,13 +183,13 @@ resource "oci_core_subnet" "vcn_public_subnet" {
 
   route_table_id    = module.vcn.ig_route_id
   security_list_ids = [oci_core_security_list.public_subnet_sl.id]
-  display_name      = "k8s-public-subnet"
+  display_name      = local.name_snet_pub
 }
 
 resource "oci_containerengine_cluster" "k8s_cluster" {
   compartment_id     = var.compartment_id
   kubernetes_version = var.kubernetes_version
-  name               = "k8s-cluster"
+  name               = local.name_oke
   vcn_id             = module.vcn.vcn_id
 
   endpoint_config {
@@ -207,7 +231,7 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
   cluster_id         = oci_containerengine_cluster.k8s_cluster.id
   compartment_id     = var.compartment_id
   kubernetes_version = var.kubernetes_version
-  name               = "k8s-node-pool"
+  name               = local.name_np
   node_config_details {
     placement_configs {
       availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
@@ -238,14 +262,14 @@ resource "oci_containerengine_node_pool" "k8s_node_pool" {
 
   initial_node_labels {
     key   = "name"
-    value = "k8s-cluster"
+    value = local.name_oke
   }
 
 }
 
 resource "oci_artifacts_container_repository" "docker_repository" {
   compartment_id = var.compartment_id
-  display_name   = "kubernetes-repo"
+  display_name   = local.name_repo
 
   is_immutable = false
   is_public    = false

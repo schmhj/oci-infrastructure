@@ -12,14 +12,31 @@ provider "oci" {
   region = var.region
 }
 
+locals {
+  base_name = "${var.project}-${var.env}-${var.region}"
+
+  prefixes = {
+    namespace = "ns"
+    release   = "release"
+    nlb       = "nlb"
+    snet_pub  = "snet-pub"
+    snet_priv = "snet-priv"
+    np        = "np"
+  }
+
+  name_namespace = "${local.prefixes.namespace}-${var.project}-${var.env}-${var.region}"
+  name_release   = "${local.prefixes.release}-${var.project}-${var.env}-${var.region}"
+  name_nlb       = "${local.prefixes.nlb}-${var.project}-${var.env}-${var.region}"
+}
+
 resource "kubernetes_namespace_v1" "argocd" {
   metadata {
-    name = "argocd"
+    name = "${local.name_namespace}-argocd"
   }
 }
 
 resource "helm_release" "argocd" {
-  name       = "argocd"
+  name       = "${local.name_release}-argocd"
   repository = "https://argoproj.github.io/argo-helm"
   chart      = "argo-cd"
   namespace  = kubernetes_namespace_v1.argocd.metadata[0].name
@@ -50,7 +67,7 @@ locals {
 
 resource "oci_network_load_balancer_network_load_balancer" "nlb" {
   compartment_id = var.compartment_id
-  display_name   = "k8s-nlb"
+  display_name   = local.name_nlb
   subnet_id      = var.public_subnet_id
 
   is_private                     = false
@@ -62,7 +79,7 @@ resource "oci_network_load_balancer_backend_set" "nlb_backend_set" {
     protocol = "TCP"
     port     = 10256
   }
-  name                     = "k8s-backend-set"
+  name                     = "${local.name_nlb}-backend-set"
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   policy                   = "FIVE_TUPLE"
 
@@ -79,7 +96,7 @@ resource "oci_network_load_balancer_backend" "nlb_backend" {
 
 resource "oci_network_load_balancer_listener" "nlb_listener" {
   default_backend_set_name = oci_network_load_balancer_backend_set.nlb_backend_set.name
-  name                     = "k8s-nlb-listener"
+  name                     = "${local.name_nlb}-listener"
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = "443"
   protocol                 = "TCP"
