@@ -18,6 +18,8 @@ jobs:
     # Protect this job using a GitHub Environment with required reviewers
     environment: production
     runs-on: ubuntu-latest
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
     env:
       TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
