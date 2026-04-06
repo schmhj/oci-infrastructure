@@ -27,6 +27,7 @@ locals {
   }
 
   name_vcn      = "${local.prefixes.vcn}-${var.project}-${var.env}-${var.region}"
+  name_vcn_dns  = "${local.prefixes.vcn}-${var.project}-${var.env}"
   name_snet_pub = "${local.prefixes.snet_pub}-${var.project}-${var.env}-${var.region}"
   name_snet_priv= "${local.prefixes.snet_priv}-${var.project}-${var.env}-${var.region}"
   name_oke      = "${local.prefixes.oke}-${var.project}-${var.env}-${var.region}"
@@ -48,7 +49,7 @@ module "vcn" {
   nat_gateway_route_rules      = null
 
   vcn_name      = local.name_vcn
-  vcn_dns_label = lower(replace(local.name_vcn, "_", "-"))
+  vcn_dns_label = lower(replace(local.name_vcn_dns, "-", ""))
   vcn_cidrs     = ["10.0.0.0/16"]
 
   create_internet_gateway = true
