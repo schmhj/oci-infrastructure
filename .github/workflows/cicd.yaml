@@ -58,11 +58,7 @@ jobs:
         working-directory: oci-infra
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-        run: |
-          terraform init \
-            -backend-config="hostname=app.terraform.io" \
-            -backend-config="organization=${{ vars.TF_CLOUD_ORG }}" \
-            -backend-config="workspaces.name=${{ vars.TF_CLOUD_WORKSPACE_OCI }}"
+        run: terraform init -input=false
 
       - name: Terraform Plan
         id: plan
@@ -133,11 +129,7 @@ jobs:
         working-directory: k8s-infra
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-        run: |
-          terraform init \
-            -backend-config="hostname=app.terraform.io" \
-            -backend-config="organization=${{ vars.TF_CLOUD_ORG }}" \
-            -backend-config="workspaces.name=${{ vars.TF_CLOUD_WORKSPACE_K8S }}"
+        run: terraform init -input=false
 
       - name: Terraform Plan
         id: plan
@@ -202,7 +194,9 @@ jobs:
 
       - name: Terraform Init
         working-directory: oci-infra
-        run: terraform init
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+        run: terraform init -input=false
 
       - name: Terraform Apply
         working-directory: oci-infra
@@ -271,7 +265,9 @@ jobs:
 
       - name: Terraform Init
         working-directory: k8s-infra
-        run: terraform init
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+        run: terraform init -input=false
 
       - name: Terraform Apply
         working-directory: k8s-infra

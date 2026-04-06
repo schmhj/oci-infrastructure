@@ -47,11 +47,7 @@ jobs:
         working-directory: oci-infra
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-        run: |
-          terraform init -input=false \
-            -backend-config="hostname=app.terraform.io" \
-            -backend-config="organization=${{ vars.TF_CLOUD_ORG }}" \
-            -backend-config="workspaces.name=${{ vars.TF_CLOUD_WORKSPACE_OCI }}"
+        run: terraform init -input=false
 
       - name: Verify explicit confirmation and expected cluster
         working-directory: oci-infra
