@@ -8,6 +8,16 @@ variable "region" {
   description = "The region to provision the resources in"
 }
 
+variable "project" {
+  type        = string
+  description = "Project short name to use in resource names (kebab-case)"
+}
+
+variable "env" {
+  type        = string
+  description = "Environment name to use in resource names (kebab-case, e.g. dev, staging, prod)"
+}
+
 variable "public_subnet_id" {
   type = string
   description = "The public subnet's OCID"
