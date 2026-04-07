@@ -184,7 +184,7 @@ jobs:
         id: outputs
         working-directory: oci-infra
         run: |
-          echo "cluster_id=$(terraform output -raw k8s-cluster-id)" >> $GITHUB_OUTPUT
+          echo "cluster_id=$(terraform output -raw oke_cluster_ocid)" >> $GITHUB_OUTPUT
           echo "node_pool_id=$(terraform output -raw node_pool_id)" >> $GITHUB_OUTPUT
           echo "public_subnet_id=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
 

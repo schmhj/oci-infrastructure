@@ -3,7 +3,7 @@ terraform {
     hostname     = "app.terraform.io"
     organization = "schmhj"
     workspaces {
-      name = "cloud-workspace-k8s"
+      name = "cloud-workspace-oci"
     }
   }
 }
