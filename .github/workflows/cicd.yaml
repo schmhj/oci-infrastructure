@@ -38,6 +38,8 @@ jobs:
   oci:
     name: "OCI Provisioning"
     runs-on: ubuntu-latest
+    outputs:
+      cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -102,6 +104,8 @@ jobs:
     name: "Setup SA and Secrets"
     needs: oci
     runs-on: ubuntu-latest
+    outputs:
+      k8s_token: ${{ steps.run_sa_script.outputs.k8s_token }}
     # Run if oci changed OR if manually triggered
     if: | 
       always() && 
@@ -114,22 +118,23 @@ jobs:
 
       - name: Install OCI CLI & kubectl
         run: |
-          bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- --accept-all-defaults
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install --upgrade oci-cli
 
-      - name: Configure OCI CLI
+      - name: Configure OCI CLI from secrets
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.oci
-          echo "[DEFAULT]" > ~/.oci/config
-          echo "user=${{ secrets.OCI_USER_OCID }}" >> ~/.oci/config
-          echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}" >> ~/.oci/config
-          echo "tenancy=${{ secrets.OCI_TENANCY_OCID }}" >> ~/.oci/config
-          echo "region=${{ vars.OCI_REGION }}" >> ~/.oci/config
+          echo "tenancy=${OCI_TENANCY}" > ~/.oci/config
+          echo "user=${OCI_USER}" >> ~/.oci/config
+          echo "fingerprint=${OCI_FINGERPRINT}" >> ~/.oci/config
           echo "key_file=~/.oci/key.pem" >> ~/.oci/config
-          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/config_key.pem
-          # Ensure correct formatting of the private key
-          tr -d '\r' < ~/.oci/config_key.pem > ~/.oci/key.pem
+          printf '%s' "${OCI_PRIVATE_KEY}" | tr -d '\r' > ~/.oci/key.pem
           chmod 600 ~/.oci/key.pem
 
       - name: Get Kubeconfig
@@ -141,6 +146,7 @@ jobs:
             --token-version 2.0.0
 
       - name: Run SA and Secret Script
+        id: run_sa_script
         run: |
           chmod +x ./scripts/setup-sa.sh
           ./scripts/setup-sa.sh
@@ -158,7 +164,7 @@ jobs:
     if: | 
       always() && 
       needs.setup-sa-secrets.result == 'success' &&
-      needs.oci.outputs.cluster_id != ''
+      needs.setup-sa-secrets.outputs.k8s_token != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
