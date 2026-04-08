@@ -148,10 +148,24 @@ jobs:
           pip3 install --upgrade oci-cli
 
       - name: Setup OCI credentials
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
           mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
+          # Prefer OCI_REGION secret, fallback to DEFAULT_REGION
+          REGION="${OCI_REGION:-$DEFAULT_REGION}"
+
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
+            "$OCI_USER" "$OCI_FINGERPRINT" "$OCI_TENANCY" "$REGION" "$HOME/.oci/oci_api_key.pem" \
+            > ~/.oci/config
+
+          # Write private key (handle CRLF safely)
+          printf '%s' "$OCI_PRIVATE_KEY" | tr -d '\r' > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
 
       - name: Get Kubeconfig
