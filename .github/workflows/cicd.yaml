@@ -183,7 +183,6 @@ jobs:
         run: |
           chmod +x ./scripts/setup_sa.sh
           ./scripts/setup_sa.sh
-          echo "k8s_token=$K8S_TOKEN" >> $GITHUB_OUTPUT
         env:
           KUBECONFIG: $HOME/.kube/config       
 
