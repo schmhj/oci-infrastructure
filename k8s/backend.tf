@@ -8,7 +8,7 @@ terraform {
   }
 }
 
-data "terraform_remote_state" "infra" {
+data "terraform_remote_state" "oci" {
   backend = "remote"
   config = {
     organization = "schmhj"

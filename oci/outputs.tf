@@ -22,6 +22,7 @@ output "nlb_public_ip" {
 }
 
 output "kubeconfig_content" {
-  value = local.kubeconfig
-  description = "K8s configuration"
+  value = data.oci_containerengine_cluster_kube_config.oke_kubeconfig.content
+  description = "Raw kubeconfig content from OCI"
+  sensitive = true
 }

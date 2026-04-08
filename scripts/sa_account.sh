@@ -40,4 +40,4 @@ EOF
 fi
 
 echo "Retrieving token..."
-kubectl get secret tfc-deployer-token -n kube-system -o jsonpath='{.data.token}' | base64 --decode
+echo "$(kubectl get secret tfc-deployer-token -n kube-system -o jsonpath='{.data.token}' | base64 --decode)"
