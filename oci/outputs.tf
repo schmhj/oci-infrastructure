@@ -20,3 +20,8 @@ output "nlb_public_ip" {
   value       = [for ip in oci_network_load_balancer_network_load_balancer.nlb.ip_addresses : ip.ip_address if ip.is_public == true][0]
   description = "NLB public IP for accessing ArgoCD via NodePort"
 }
+
+output "kubeconfig_content" {
+  value = local.kubeconfig
+  description = "K8s configuration"
+}
