@@ -25,3 +25,7 @@ variable "node_port" {
   description = "NodePort for ArgoCD service"
   default     = 30443
 }
+
+variable "k8s_token" {
+  type = string
+}

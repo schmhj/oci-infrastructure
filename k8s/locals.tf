@@ -7,5 +7,4 @@ locals {
     local.kubeconfig["clusters"][0]["cluster"]["certificate-authority-data"]
   )
 
-  cluster_token = local.kubeconfig["users"][0]["user"]["token"]
 }
