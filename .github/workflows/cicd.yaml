@@ -129,8 +129,6 @@ jobs:
     name: "Setup SA and Secrets"
     needs: oci
     runs-on: ubuntu-latest
-    outputs:
-      k8s_token: ${{ steps.run_sa_script.outputs.k8s_token }}
     # Run if oci changed OR if manually triggered
     if: | 
       always() && 
@@ -186,6 +184,18 @@ jobs:
         env:
           KUBECONFIG: $HOME/.kube/config       
 
+      - name: Save K8s token to file
+        if: success()
+        run: |
+          printf '%s' "$K8S_TOKEN" > k8s_token.txt
+
+      - name: Upload K8s token artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-token
+          path: k8s_token.txt
+
   # ============================================================
   # Job 3: K8s Configuration (Deployments, Services, Helm)
   # ============================================================
@@ -193,15 +203,25 @@ jobs:
     name: "K8s Deployment"
     needs: setup-sa-secrets # <--- This enforces the serial sequence
     runs-on: ubuntu-latest
-    if: | 
-      always() && 
-      needs.setup-sa-secrets.result == 'success' &&
-      needs.setup-sa-secrets.outputs.k8s_token != ''
+    if: |
+      always() &&
+      needs.setup-sa-secrets.result == 'success'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 2
+
+      - name: Download K8s token artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: k8s-token
+
+      - name: Set TF_VAR_k8s_token from artifact
+        run: |
+          if [ -f k8s_token.txt ]; then
+            echo "TF_VAR_k8s_token=$(cat k8s_token.txt)" >> $GITHUB_ENV
+          fi
 
       - name: Check for changes in k8s
         id: filter
