@@ -26,7 +26,7 @@ jobs:
     name: "Terraform"
     runs-on: ubuntu-latest
     strategy:
-      # This runs separate jobs for infra and k8s folders independently
+      # This runs separate jobs for oci and k8s folders independently
       matrix:
         directory: [oci, k8s]
     
