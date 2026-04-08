@@ -1,0 +1,74 @@
+name: Destroy OKE Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      allow_destroy:
+        description: 'Type true to confirm and allow destroy'
+        required: true
+        default: 'false'
+      expected_cluster_id:
+        description: 'Expected OKE cluster id to destroy (for safety verification)'
+        required: true
+        default: ''
+
+jobs:
+  destroy:
+    if: ${{ github.event.inputs.allow_destroy == 'true' }}
+    # Protect this job using a GitHub Environment with required reviewers
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+      TF_VAR_region: ${{ vars.TF_VAR_region }}
+      TF_VAR_project : ${{ vars.TF_VAR_project }}
+      TF_VAR_env : ${{ vars.TF_VAR_env }}
+      TF_VAR_allow_destroy: "${{ github.event.inputs.allow_destroy }}"
+
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup OCI credentials
+        run: |
+          mkdir -p ~/.oci
+          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
+          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: oci-infra
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+        run: terraform init -input=false
+
+      - name: Verify explicit confirmation and expected cluster
+        working-directory: oci-infra
+        run: |
+          if [ "${{ github.event.inputs.allow_destroy }}" != "true" ]; then
+            echo "allow_destroy not true — aborting"; exit 1
+          fi
+          if [ -z "${{ github.event.inputs.expected_cluster_id }}" ]; then
+            echo "expected_cluster_id is required"; exit 1
+          fi
+          # attempt to read the current cluster id from terraform outputs
+          CLUSTER_ID=$(terraform output -raw k8s-cluster-id 2>/dev/null || echo "")
+          if [ "$CLUSTER_ID" = "" ]; then
+            echo "Could not read current cluster id from state — aborting"; exit 1
+          fi
+          if [ "$CLUSTER_ID" != "${{ github.event.inputs.expected_cluster_id }}" ]; then
+            echo "Cluster ID mismatch. Expected '${{ github.event.inputs.expected_cluster_id }}' but found '$CLUSTER_ID'"; exit 1
+          fi
+
+      - name: Run Terraform Destroy
+        working-directory: oci-infra
+        env:
+          TF_VAR_allow_destroy: "true"
+        run: terraform destroy -auto-approve

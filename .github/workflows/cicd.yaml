@@ -1,263 +1,289 @@
 name: OKE Cluster Deploy Infrastructure
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
+    paths:
+      - 'oci/**'
+      - 'k8s/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'oci/**'
+      - 'k8s/**'
 
 permissions:
   contents: read
-  issues: write
   pull-requests: write
 
 jobs:
   # ============================================================
-  # PLAN — runs on pull_request only
+  # Terraform — runs on pull_request and push to main branch
   # ============================================================
-  plan-oci-infra:
-    name: Plan OCI Infrastructure
-    if: github.event_name == 'pull_request'
+  terraform:
+    name: "Terraform"
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-
-    env:
-      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
-      TF_VAR_region: ${{ vars.TF_VAR_region }}
-      TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-
+    strategy:
+      # This runs separate jobs for oci and k8s folders independently
+      matrix:
+        directory: [oci, k8s]
+    
+    # Use conditionals to ensure we only run the job for the directory that changed
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          repository: schmhj/oci-infrastructure
-          token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          fetch-depth: 0
+          fetch-depth: 2
 
-      - name: Setup OCI credentials
+      - name: Check for changes in ${{ matrix.directory }}
+        id: filter
         run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
+          if git diff --name-only HEAD^ HEAD | grep -q "^${{ matrix.directory }}/"; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Terraform
+        if: steps.filter.outputs.changed == 'true'
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_wrapper: false
+          cli_config_credentials_token: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Init
-        working-directory: oci-infra
+        if: steps.filter.outputs.changed == 'true'
         run: terraform init
+        working-directory: ${{ matrix.directory }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
-        id: plan
-        working-directory: oci-infra
-        run: |
-          terraform plan -no-color 2>&1 | tee plan.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: Post Plan Comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('oci-infra/plan.txt', 'utf8');
-            const truncated = plan.length > 60000 ? plan.slice(-60000) + '\n...(truncated)' : plan;
-            const body = `## OCI Infrastructure Plan\n\`\`\`hcl\n${truncated}\n\`\`\``;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
-
-  plan-k8s-infra:
-    name: Plan Kubernetes Infrastructure
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-
-    env:
-      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
-      TF_VAR_region: ${{ vars.TF_VAR_region }}
-      TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      # These are stored as GitHub Variables after the first apply
-      TF_VAR_node_pool_id: ${{ vars.TF_VAR_node_pool_id }}
-      TF_VAR_public_subnet_id: ${{ vars.TF_VAR_public_subnet_id }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: schmhj/oci-infrastructure
-          token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          fetch-depth: 0
-
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-
-      - name: Setup kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
-          chmod 600 ~/.kube/config
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: k8s-infra
-        run: terraform init
-
-      - name: Terraform Plan
-        id: plan
-        working-directory: k8s-infra
-        run: |
-          terraform plan -no-color 2>&1 | tee plan.txt
-          echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: Post Plan Comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('k8s-infra/plan.txt', 'utf8');
-            const truncated = plan.length > 60000 ? plan.slice(-60000) + '\n...(truncated)' : plan;
-            const body = `## Kubernetes Infrastructure Plan\n\`\`\`hcl\n${truncated}\n\`\`\``;
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
-
-  # ============================================================
-  # APPLY — runs on push to main only
-  # ============================================================
-  apply-oci-infra:
-    name: Apply OCI Infrastructure
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    outputs:
-      cluster_id: ${{ steps.outputs.outputs.cluster_id }}
-      node_pool_id: ${{ steps.outputs.outputs.node_pool_id }}
-      public_subnet_id: ${{ steps.outputs.outputs.public_subnet_id }}
-
-    env:
-      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
-      TF_VAR_region: ${{ vars.TF_VAR_region }}
-      TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: schmhj/oci-infrastructure
-          token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          fetch-depth: 0
-
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: oci-infra
-        run: terraform init
+        if: steps.filter.outputs.changed == 'true' && github.event_name == 'pull_request'
+        run: terraform plan -no-color -input=false
+        working-directory: ${{ matrix.directory }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
-        working-directory: oci-infra
-        run: terraform apply -auto-approve
+        if: steps.filter.outputs.changed == 'true' && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false
+        working-directory: ${{ matrix.directory }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
-      - name: Capture Outputs
-        id: outputs
-        working-directory: oci-infra
-        run: |
-          echo "cluster_id=$(terraform output -raw k8s-cluster-id)" >> $GITHUB_OUTPUT
-          echo "node_pool_id=$(terraform output -raw node_pool_id)" >> $GITHUB_OUTPUT
-          echo "public_subnet_id=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
 
-  apply-k8s-infra:
-    name: Apply Kubernetes Infrastructure
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    needs: apply-oci-infra
+  # # ============================================================
+  # # PLAN — runs on pull_request only
+  # # ============================================================
+  # plan-oci-infra:
+  #   name: Plan OCI Infrastructure
+  #   if: github.event_name == 'pull_request'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     pull-requests: write
 
-    env:
-      TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
-      TF_VAR_region: ${{ vars.TF_VAR_region }}
-      TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
-      TF_VAR_node_pool_id: ${{ needs.apply-oci-infra.outputs.node_pool_id }}
-      TF_VAR_public_subnet_id: ${{ needs.apply-oci-infra.outputs.public_subnet_id }}
-      TF_VAR_project : ${{ vars.TF_VAR_project }}
-      TF_VAR_env : ${{ vars.TF_VAR_env }}
+  #   env:
+  #     TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #     TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+  #     TF_VAR_region: ${{ vars.TF_VAR_region }}
+  #     TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+  #     TF_VAR_project: ${{ vars.TF_VAR_project }}
+  #     TF_VAR_env: ${{ vars.TF_VAR_env }}
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          repository: schmhj/oci-infrastructure
-          token: ${{ secrets.REPO_ACCESS_TOKEN }}
-          fetch-depth: 0
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: schmhj/oci-infrastructure
+  #         token: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #         fetch-depth: 0
 
-      - name: Setup OCI credentials
-        run: |
-          mkdir -p ~/.oci
-          echo "${{ secrets.OCI_CONFIG }}" > ~/.oci/config
-          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
 
-      - name: Install OCI CLI
-        run: |
-          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh \
-            --output install.sh
-          bash install.sh --accept-all-defaults
-          echo "$HOME/bin" >> $GITHUB_PATH
-          echo "$HOME/lib/oracle-cli/bin" >> $GITHUB_PATH
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_wrapper: false
 
-      - name: Generate kubeconfig
-        run: |
-          mkdir -p ~/.kube
-          oci ce cluster create-kubeconfig \
-            --cluster-id ${{ needs.apply-oci-infra.outputs.cluster_id }} \
-            --file ~/.kube/config \
-            --region ${{ vars.TF_VAR_region }} \
-            --token-version 2.0.0 \
-            --kube-endpoint PUBLIC_ENDPOINT
+  #     - name: Terraform Init
+  #       working-directory: oci-infra
+  #       env:
+  #         TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #       run: terraform init -input=false
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_wrapper: false
+  #     - name: Terraform Plan
+  #       id: plan
+  #       working-directory: oci-infra
+  #       env:
+  #         TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #       run: |
+  #         terraform plan -no-color 2>&1 | tee plan.txt
+  #         echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
-      - name: Terraform Init
-        working-directory: k8s-infra
-        run: terraform init
+  #     - name: Post Plan Comment
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const fs = require('fs');
+  #           const plan = fs.readFileSync('oci-infra/plan.txt', 'utf8');
+  #           const truncated = plan.length > 60000 ? plan.slice(-60000) + '\n...(truncated)' : plan;
+  #           const body = `## OCI Infrastructure Plan\n\`\`\`hcl\n${truncated}\n\`\`\``;
+  #           await github.rest.issues.createComment({
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             issue_number: context.issue.number,∆
+  #             body
+  #           });
 
-      - name: Terraform Apply
-        working-directory: k8s-infra
-        run: terraform apply -auto-approve
+  # plan-k8s-infra:
+  #   name: Plan Kubernetes Infrastructure
+  #   if: github.event_name == 'pull_request'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     pull-requests: write
+
+  #   env:
+  #     TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #     TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+  #     TF_VAR_region: ${{ vars.TF_VAR_region }}
+  #     TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+  #     # These are stored as GitHub Variables after the first apply
+  #     TF_VAR_node_pool_id: ${{ vars.TF_VAR_node_pool_id }}
+  #     TF_VAR_public_subnet_id: ${{ vars.TF_VAR_public_subnet_id }}
+  #     TF_VAR_project: ${{ vars.TF_VAR_project }}
+  #     TF_VAR_env: ${{ vars.TF_VAR_env }}
+
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: schmhj/oci-infrastructure
+  #         token: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #         fetch-depth: 0
+
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_wrapper: false
+
+  #     - name: Terraform Init
+  #       working-directory: k8s-infra
+  #       env:
+  #         TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #       run: terraform init -input=false
+
+  #     - name: Terraform Plan
+  #       id: plan
+  #       working-directory: k8s-infra
+  #       run: |
+  #         terraform plan -no-color 2>&1 | tee plan.txt
+  #         echo "exitcode=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+  #     - name: Post Plan Comment
+  #       uses: actions/github-script@v7
+  #       with:
+  #         script: |
+  #           const fs = require('fs');
+  #           const plan = fs.readFileSync('k8s-infra/plan.txt', 'utf8');
+  #           const truncated = plan.length > 60000 ? plan.slice(-60000) + '\n...(truncated)' : plan;
+  #           const body = `## Kubernetes Infrastructure Plan\n\`\`\`hcl\n${truncated}\n\`\`\``;
+  #           await github.rest.issues.createComment({
+  #             owner: context.repo.owner,
+  #             repo: context.repo.repo,
+  #             issue_number: context.issue.number,
+  #             body
+  #           });
+
+  # # ============================================================
+  # # APPLY — runs on push to main only
+  # # ============================================================
+  # apply-oci-infra:
+  #   name: Apply OCI Infrastructure
+  #   if: github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     cluster_id: ${{ steps.outputs.outputs.cluster_id }}
+  #     node_pool_id: ${{ steps.outputs.outputs.node_pool_id }}
+  #     public_subnet_id: ${{ steps.outputs.outputs.public_subnet_id }}
+
+  #   env:
+  #     TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #     TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+  #     TF_VAR_region: ${{ vars.TF_VAR_region }}
+  #     TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+  #     TF_VAR_project: ${{ vars.TF_VAR_project }}
+  #     TF_VAR_env: ${{ vars.TF_VAR_env }}
+
+
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: schmhj/oci-infrastructure
+  #         token: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #         fetch-depth: 0
+
+
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_wrapper: false
+
+  #     - name: Terraform Init
+  #       working-directory: oci-infra
+  #       env:
+  #         TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #       run: terraform init -input=false
+
+  #     - name: Terraform Apply
+  #       working-directory: oci-infra
+  #       run: terraform apply -auto-approve
+
+  #     - name: Capture Outputs
+  #       id: outputs
+  #       working-directory: oci-infra
+  #       run: |
+  #         echo "cluster_id=$(terraform output -raw oke_cluster_ocid)" >> $GITHUB_OUTPUT
+  #         echo "node_pool_id=$(terraform output -raw node_pool_id)" >> $GITHUB_OUTPUT
+  #         echo "public_subnet_id=$(terraform output -raw public_subnet_id)" >> $GITHUB_OUTPUT
+
+  # apply-k8s-infra:
+  #   name: Apply Kubernetes Infrastructure
+  #   if: github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   needs: apply-oci-infra
+
+  #   env:
+  #     TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #     TF_VAR_compartment_id: ${{ vars.TF_VAR_compartment_id }}
+  #     TF_VAR_region: ${{ vars.TF_VAR_region }}
+  #     TF_VAR_kubernetes_version: ${{ vars.TF_VAR_kubernetes_version }}
+  #     TF_VAR_node_pool_id: ${{ needs.apply-oci-infra.outputs.node_pool_id }}
+  #     TF_VAR_public_subnet_id: ${{ needs.apply-oci-infra.outputs.public_subnet_id }}
+  #     TF_VAR_project: ${{ vars.TF_VAR_project }}
+  #     TF_VAR_env: ${{ vars.TF_VAR_env }}
+
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+  #       with:
+  #         repository: schmhj/oci-infrastructure
+  #         token: ${{ secrets.REPO_ACCESS_TOKEN }}
+  #         fetch-depth: 0
+
+
+  #     - name: Setup Terraform
+  #       uses: hashicorp/setup-terraform@v3
+  #       with:
+  #         terraform_wrapper: false
+
+  #     - name: Terraform Init
+  #       working-directory: k8s-infra
+  #       env:
+  #         TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+  #       run: terraform init -input=false
+
+  #     - name: Terraform Apply
+  #       working-directory: k8s-infra
+  #       run: terraform apply -auto-approve
