@@ -13,6 +13,7 @@ on:
     paths:
       - 'oci/**'
       - 'k8s/**'
+  workflow_dispatch:
 
 permissions:
   contents: read
