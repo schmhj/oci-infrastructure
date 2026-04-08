@@ -7,12 +7,14 @@ on:
     paths:
       - 'oci/**'
       - 'k8s/**'
+      - 'scripts/**'
   push:
     branches:
       - main
     paths:
       - 'oci/**'
       - 'k8s/**'
+      - 'scripts/**'
   workflow_dispatch:
     inputs:
       action:
@@ -77,9 +79,70 @@ jobs:
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+      
+      # Capture the output from the Terraform state
+      - name: Export Cluster ID
+        id: get_cluster_id
+        run: |
+          # 'terraform output -raw' extracts the value without quotes
+          ID=$(terraform output -raw cluster_id)
+          echo "cluster_id=$ID" >> $GITHUB_OUTPUT
+        working-directory: oci
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+
+  
+  # ============================================================
+  # Job 2: SA and Secret Script (The "Glue" Job)
+  # ============================================================
+  setup-sa-secrets:
+    name: "Setup SA and Secrets"
+    needs: oci
+    runs-on: ubuntu-latest
+    # Run if oci changed OR if manually triggered
+    if: always() && (needs.oci.result == 'success')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OCI CLI & kubectl
+        run: |
+          bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- --accept-all-defaults
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          sudo install -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Configure OCI CLI
+        run: |
+          mkdir -p ~/.oci
+          echo "[DEFAULT]" > ~/.oci/config
+          echo "user=${{ secrets.OCI_USER_OCID }}" >> ~/.oci/config
+          echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}" >> ~/.oci/config
+          echo "tenancy=${{ secrets.OCI_TENANCY_OCID }}" >> ~/.oci/config
+          echo "region=${{ vars.OCI_REGION }}" >> ~/.oci/config
+          echo "key_file=~/.oci/key.pem" >> ~/.oci/config
+          echo "${{ secrets.OCI_PRIVATE_KEY }}" > ~/.oci/config_key.pem
+          # Ensure correct formatting of the private key
+          tr -d '\r' < ~/.oci/config_key.pem > ~/.oci/key.pem
+          chmod 600 ~/.oci/key.pem
+
+      - name: Get Kubeconfig
+        run: |
+          oci ce cluster create-kubeconfig \
+            --cluster-id ${{ needs.oci.outputs.cluster_id }} \
+            --file $HOME/.kube/config \
+            --region ${{ vars.OCI_REGION }} \
+            --token-version 2.0.0
+
+      - name: Run SA and Secret Script
+        run: |
+          chmod +x ./scripts/setup-sa.sh
+          ./scripts/setup-sa.sh
+          echo "k8s_token=$K8S_TOKEN" >> $GITHUB_OUTPUT
+        env:
+          KUBECONFIG: $HOME/.kube/config        
 
   # ============================================================
-  # Job 2: K8s Configuration (Deployments, Services, Helm)
+  # Job 3: K8s Configuration (Deployments, Services, Helm)
   # ============================================================
   k8s:
     name: "K8s Deployment"
@@ -117,6 +180,7 @@ jobs:
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+          TF_VAR_k8s_token: ${{ needs.setup-sa-secrets.outputs.k8s_token }}
 
       - name: Terraform Apply
         if: |
@@ -126,3 +190,4 @@ jobs:
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+          TF_VAR_k8s_token: ${{ needs.setup-sa-secrets.outputs.k8s_token }}
