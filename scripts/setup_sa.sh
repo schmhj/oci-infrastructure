@@ -2,7 +2,7 @@
 
 set -e  # exit on any error
 
-export KUBECONFIG=~/.kube/config
+export KUBECONFIG=$HOME/.kube/config
 
 # Check if service account already exists
 if kubectl get serviceaccount tfc-deployer -n kube-system &>/dev/null; then
