@@ -83,6 +83,9 @@ jobs:
       # Capture the output from the Terraform state
       - name: Export Cluster ID
         id: get_cluster_id
+        if: |
+          (steps.filter.outputs.changed == 'true' && github.event_name == 'push') ||
+          (github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'plan_and_apply'))
         run: |
           # 'terraform output -raw' extracts the value without quotes
           ID=$(terraform output -raw cluster_id)
@@ -100,7 +103,11 @@ jobs:
     needs: oci
     runs-on: ubuntu-latest
     # Run if oci changed OR if manually triggered
-    if: always() && (needs.oci.result == 'success')
+    if: | 
+      always() && 
+      needs.oci.result == 'success' &&
+      needs.oci.outputs.cluster_id != ''
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -146,8 +153,12 @@ jobs:
   # ============================================================
   k8s:
     name: "K8s Deployment"
-    needs: oci # <--- This enforces the serial sequence
+    needs: setup-sa-secrets # <--- This enforces the serial sequence
     runs-on: ubuntu-latest
+    if: | 
+      always() && 
+      needs.setup-sa-secrets.result == 'success' &&
+      needs.oci.outputs.cluster_id != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
