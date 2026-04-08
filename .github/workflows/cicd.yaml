@@ -48,35 +48,45 @@ jobs:
 
       - name: Check for changes in oci
         id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
+          CHANGED=false
           if git diff --name-only HEAD^ HEAD | grep -q "^oci/"; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            CHANGED=true
           fi
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+
+          RUN_PLAN=false
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$CHANGED" = "true" ]; then
+            RUN_PLAN=true
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "plan" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
+            RUN_PLAN=true
+          fi
+          echo "run_plan=$RUN_PLAN" >> $GITHUB_OUTPUT
 
       - name: Setup Terraform
+        if: steps.filter.outputs.run_plan == 'true'
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
+        if: steps.filter.outputs.run_plan == 'true'
         run: terraform init
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
-        if: |
-          (steps.filter.outputs.changed == 'true' && github.event_name == 'pull_request') ||
-          (github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'plan_and_apply'))
+        if: steps.filter.outputs.run_plan == 'true'
         run: terraform plan -no-color -input=false
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
-        if: |
-          (steps.filter.outputs.changed == 'true' && github.event_name == 'push') ||
-          (github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'plan_and_apply'))
+        if: steps.filter.outputs.run_plan == 'true'
         run: terraform apply -auto-approve -input=false
         working-directory: oci
         env:
@@ -85,9 +95,7 @@ jobs:
       # Capture the output from the Terraform state
       - name: Export Cluster ID
         id: get_cluster_id
-        if: |
-          (steps.filter.outputs.changed == 'true' && github.event_name == 'push') ||
-          (github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'plan_and_apply'))
+        if: steps.filter.outputs.run_plan == 'true'
         run: |
           # 'terraform output -raw' extracts the value without quotes
           ID=$(terraform output -raw cluster_id)
@@ -166,12 +174,24 @@ jobs:
 
       - name: Check for changes in k8s
         id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
+          CHANGED=false
           if git diff --name-only HEAD^ HEAD | grep -q "^k8s/"; then
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            CHANGED=true
           fi
+          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+
+          RUN_PLAN=false
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$CHANGED" = "true" ]; then
+            RUN_PLAN=true
+          fi
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "plan" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
+            RUN_PLAN=true
+          fi
+          echo "run_plan=$RUN_PLAN" >> $GITHUB_OUTPUT
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -183,9 +203,7 @@ jobs:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
-        if: |
-          (steps.filter.outputs.changed == 'true' && github.event_name == 'pull_request') ||
-          (github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'plan_and_apply'))
+        if: steps.filter.outputs.run_plan == 'true'
         run: terraform plan -no-color -input=false
         working-directory: k8s
         env:
@@ -193,9 +211,7 @@ jobs:
           TF_VAR_k8s_token: ${{ needs.setup-sa-secrets.outputs.k8s_token }}
 
       - name: Terraform Apply
-        if: |
-          (steps.filter.outputs.changed == 'true' && github.event_name == 'push') ||
-          (github.event_name == 'workflow_dispatch' && (inputs.action == 'apply' || inputs.action == 'plan_and_apply'))
+        if: steps.filter.outputs.run_plan == 'true'
         run: terraform apply -auto-approve -input=false
         working-directory: k8s
         env:
