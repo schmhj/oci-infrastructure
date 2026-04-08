@@ -28,7 +28,7 @@ jobs:
     strategy:
       # This runs separate jobs for infra and k8s folders independently
       matrix:
-        directory: [infra, k8s]
+        directory: [oci, k8s]
     
     # Use conditionals to ensure we only run the job for the directory that changed
     steps:
@@ -50,23 +50,28 @@ jobs:
         if: steps.filter.outputs.changed == 'true'
         uses: hashicorp/setup-terraform@v3
         with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+          cli_config_credentials_token: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Init
         if: steps.filter.outputs.changed == 'true'
         run: terraform init
         working-directory: ${{ matrix.directory }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
         if: steps.filter.outputs.changed == 'true' && github.event_name == 'pull_request'
         run: terraform plan -no-color -input=false
         working-directory: ${{ matrix.directory }}
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
         if: steps.filter.outputs.changed == 'true' && github.event_name == 'push'
         run: terraform apply -auto-approve -input=false
         working-directory: ${{ matrix.directory }}
-
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
 
   # # ============================================================
