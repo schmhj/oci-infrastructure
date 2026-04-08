@@ -14,6 +14,16 @@ on:
       - 'oci/**'
       - 'k8s/**'
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Choose action to run'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - plan_and_apply
 
 permissions:
   contents: read
@@ -31,7 +41,6 @@ jobs:
       matrix:
         directory: [oci, k8s]
     
-    # Use conditionals to ensure we only run the job for the directory that changed
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,14 +57,20 @@ jobs:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
-        if: github.event_name == 'pull_request'
+        if: |
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'workflow_dispatch' &&
+           (inputs.action == 'plan' || inputs.action == 'plan_and_apply'))
         run: terraform plan -no-color -input=false
         working-directory: ${{ matrix.directory }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
-        if: github.event_name == 'push'
+        if: |
+          github.event_name == 'push' ||
+          (github.event_name == 'workflow_dispatch' &&
+           (inputs.action == 'apply' || inputs.action == 'plan_and_apply'))
         run: terraform apply -auto-approve -input=false
         working-directory: ${{ matrix.directory }}
         env:
