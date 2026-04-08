@@ -167,6 +167,7 @@ jobs:
           # Write private key (handle CRLF safely)
           printf '%s' "$OCI_PRIVATE_KEY" | tr -d '\r' > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
+          oci setup repair-file-permissions --file ~/.oci/config 
 
       - name: Get Kubeconfig
         run: |
@@ -180,8 +181,8 @@ jobs:
       - name: Run SA and Secret Script
         id: run_sa_script
         run: |
-          chmod +x ./scripts/setup-sa.sh
-          ./scripts/setup-sa.sh
+          chmod +x ./scripts/setup_sa.sh
+          ./scripts/setup_sa.sh
           echo "k8s_token=$K8S_TOKEN" >> $GITHUB_OUTPUT
         env:
           KUBECONFIG: $HOME/.kube/config       
