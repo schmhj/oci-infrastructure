@@ -242,6 +242,10 @@ jobs:
           steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
+      - name: Create Auto-Vars File
+        run: |
+          echo 'k8s_token = "${{ secrets.K8S_CLUSTER_TOKEN }}"' > k8s/secrets.auto.tfvars
+
       - name: Terraform Init
         if: |
           steps.filter.outputs.run_plan == 'true' || 
@@ -255,14 +259,14 @@ jobs:
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
-        run: terraform plan -no-color -input=false -var="k8s_token=${{ secrets.K8S_CLUSTER_TOKEN }}"
+        run: terraform plan -no-color -input=false
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
-        run: terraform apply -auto-approve -input=false -var="k8s_token=${{ secrets.K8S_CLUSTER_TOKEN }}"
+        run: terraform apply -auto-approve -input=false
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
