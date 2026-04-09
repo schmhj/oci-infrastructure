@@ -242,14 +242,23 @@ jobs:
           steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
-      - name: Create Auto-Vars File
+       - name: Create Auto-Vars File
+        env:
+          RAW_TOKEN: ${{ secrets.K8S_CLUSTER_TOKEN }}
         run: |
+          # 1. Create the directory if it doesn't exist
           mkdir -p k8s
-          cat > k8s/secrets.auto.tfvars.json <<'EOF'
-          {
-            "k8s_token": ${{ toJson(secrets.K8S_CLUSTER_TOKEN) }}
-          }
-          EOF
+          
+          # 2. Use jq to build the JSON file. 
+          # --arg ensures the string is escaped and quoted for JSON automatically.
+          jq -n --arg token "$RAW_TOKEN" '{"k8s_token": $token}' > k8s/secrets.auto.tfvars.json
+          
+          # 3. Security: Check that the file was created (optional)
+          if [ ! -s k8s/secrets.auto.tfvars.json ]; then
+            echo "Error: Failed to create secrets file or file is empty."
+            exit 1
+          fi
+
 
       - name: Terraform Init
         if: |
