@@ -107,34 +107,27 @@ jobs:
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
       
-      # Capture the output from the Terraform state
       - name: Export Cluster ID
         id: get_cluster_id
-        if: |
-          steps.filter.outputs.run_apply == 'true' || 
-            steps.filter.outputs.run_plan == 'true'
+        if: steps.filter.outputs.run_apply == 'true' || steps.filter.outputs.run_plan == 'true'
         run: |
-          # 'terraform output -raw' extracts the value without quotes
           ID=$(terraform output -raw cluster_id)
           echo "cluster_id=$ID" >> $GITHUB_OUTPUT
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
-  
   # ============================================================
-  # Job 2: SA and Secret Script (The "Glue" Job)
+  # Job 2: SA and Secret Script
   # ============================================================
   setup-sa-secrets:
     name: "Setup SA and Secrets"
     needs: oci
     runs-on: ubuntu-latest
-    # Run if oci changed OR if manually triggered
     if: | 
       always() && 
       needs.oci.result == 'success' &&
       needs.oci.outputs.cluster_id != ''
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -155,14 +148,10 @@ jobs:
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
           mkdir -p ~/.oci
-          # Prefer OCI_REGION secret, fallback to DEFAULT_REGION
           REGION="${OCI_REGION:-$DEFAULT_REGION}"
-
           printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
             "$OCI_USER" "$OCI_FINGERPRINT" "$OCI_TENANCY" "$REGION" "$HOME/.oci/oci_api_key.pem" \
             > ~/.oci/config
-
-          # Write private key (handle CRLF safely)
           printf '%s' "$OCI_PRIVATE_KEY" | tr -d '\r' > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
           oci setup repair-file-permissions --file ~/.oci/config 
@@ -181,21 +170,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT_SECRET_ADMIN }}
         run: |
+          chmod +x ./scripts/setup_sa.sh
           K8S_TOKEN=$(./scripts/setup_sa.sh)
-          
           if [ -z "$K8S_TOKEN" ]; then
             echo "Failed to capture token"
             exit 1
           fi
-
           gh secret set K8S_CLUSTER_TOKEN --body "$K8S_TOKEN" --repo ${{ github.repository }}
 
   # ============================================================
-  # Job 3: K8s Configuration (Deployments, Services, Helm)
+  # Job 3: K8s Configuration
   # ============================================================
   k8s:
     name: "K8s Deployment"
-    needs: setup-sa-secrets # <--- This enforces the serial sequence
+    needs: setup-sa-secrets
     runs-on: ubuntu-latest
     if: |
       always() &&
@@ -237,42 +225,26 @@ jobs:
           echo "run_apply=$RUN_APPLY" >> $GITHUB_OUTPUT
 
       - name: Setup Terraform
-        if: |
-          steps.filter.outputs.run_plan == 'true' || 
-          steps.filter.outputs.run_apply == 'true'
+        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
-       - name: Create Auto-Vars File
+      - name: Create Auto-Vars File
+        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
         env:
           RAW_TOKEN: ${{ secrets.K8S_CLUSTER_TOKEN }}
         run: |
-          # 1. Create the directory if it doesn't exist
           mkdir -p k8s
-          
-          # 2. Use jq to build the JSON file. 
-          # --arg ensures the string is escaped and quoted for JSON automatically.
           jq -n --arg token "$RAW_TOKEN" '{"k8s_token": $token}' > k8s/secrets.auto.tfvars.json
-          
-          # 3. Security: Check that the file was created (optional)
-          if [ ! -s k8s/secrets.auto.tfvars.json ]; then
-            echo "Error: Failed to create secrets file or file is empty."
-            exit 1
-          fi
-
 
       - name: Terraform Init
-        if: |
-          steps.filter.outputs.run_plan == 'true' || 
-          steps.filter.outputs.run_apply == 'true'
+        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
         run: terraform init
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Plan
-        if: |
-          steps.filter.outputs.run_plan == 'true' || 
-          steps.filter.outputs.run_apply == 'true'
+        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
         run: terraform plan -no-color -input=false
         working-directory: k8s
         env:
@@ -284,4 +256,3 @@ jobs:
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-          
