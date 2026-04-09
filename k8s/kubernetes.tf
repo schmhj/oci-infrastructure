@@ -19,8 +19,8 @@ resource "kubernetes_cluster_role_binding" "terraform_admin" {
   }
 
   subject {
-    kind      = "User"
-    name      = var.user_ocid
-    api_group = "rbac.authorization.k8s.io"
+    kind      = "ServiceAccount"
+    name      = "terraform-admin"
+    namespace = "kube-system"
   }
 }
