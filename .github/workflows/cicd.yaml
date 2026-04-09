@@ -255,17 +255,15 @@ jobs:
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
-        run: terraform plan -no-color -input=false
+        run: terraform plan -no-color -input=false -var="k8s_token=${{ secrets.K8S_CLUSTER_TOKEN }}"
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-          TF_VAR_k8s_token: ${{ secrets.K8S_CLUSTER_TOKEN }}
 
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false -var="k8s_token=${{ secrets.K8S_CLUSTER_TOKEN }}"
         working-directory: k8s
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-          TF_VAR_k8s_token: ${{ secrets.K8S_CLUSTER_TOKEN }}
           
