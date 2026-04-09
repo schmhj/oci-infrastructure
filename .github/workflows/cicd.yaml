@@ -244,7 +244,12 @@ jobs:
 
       - name: Create Auto-Vars File
         run: |
-          echo 'k8s_token="${{ secrets.K8S_CLUSTER_TOKEN }}"' > k8s/secrets.auto.tfvars
+          mkdir -p k8s
+          cat > k8s/secrets.auto.tfvars.json <<'EOF'
+          {
+            "k8s_token": ${{ toJson(secrets.K8S_CLUSTER_TOKEN) }}
+          }
+          EOF
 
       - name: Terraform Init
         if: |
