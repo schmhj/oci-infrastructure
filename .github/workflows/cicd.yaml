@@ -181,7 +181,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT_SECRET_ADMIN }}
         run: |
-          K8S_TOKEN=$(./scripts/setup-sa.sh)
+          K8S_TOKEN=$(./scripts/setup_sa.sh)
           
           if [ -z "$K8S_TOKEN" ]; then
             echo "Failed to capture token"
