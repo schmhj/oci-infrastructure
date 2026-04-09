@@ -31,6 +31,10 @@ jobs:
             exit 1
           fi
 
+      - name: Create Auto-Vars File
+        run: |
+          echo 'k8s_token = "${{ secrets.K8S_CLUSTER_TOKEN }}"' > k8s/secrets.auto.tfvars
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
 
