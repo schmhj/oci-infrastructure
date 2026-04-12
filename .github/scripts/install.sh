@@ -37,4 +37,13 @@ tar -xzf "$KUBESEAL_TMP/kubeseal.tar.gz" -C "$KUBESEAL_TMP" kubeseal || fail "Fa
 sudo install -m 755 "$KUBESEAL_TMP/kubeseal" /usr/local/bin/kubeseal || fail "Failed to install kubeseal"
 
 success "kubeseal installed successfully"
+
+# Install ArgoCD CLI
+success "Installing ArgoCD CLI v${ARGOCD_CLI_VERSION}..."
+ARGOCD_CLI_URL="https://github.com/argoproj/argo-cd/releases/download/v${ARGOCD_CLI_VERSION}/argocd-${ARGOCD_CLI_PLATFORM}"
+curl -fsSL "$ARGOCD_CLI_URL" -o /tmp/argocd || fail "Failed to download ArgoCD CLI"
+sudo install -m 755 /tmp/argocd /usr/local/bin/argocd || fail "Failed to install ArgoCD CLI"
+rm /tmp/argocd
+
+success "ArgoCD CLI installed successfully"
 success "All tools deployed"

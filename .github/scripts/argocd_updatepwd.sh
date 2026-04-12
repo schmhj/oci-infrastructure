@@ -22,16 +22,26 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
   | base64 -d) \
   || fail "Failed to retrieve initial ArgoCD password"
 
-ARGOCD_SERVER="localhost:${ARGOCD_NODE_PORT_HTTPS}"
+# Setup port forwarding in background for argocd CLI access
+success "Setting up port forwarding to ArgoCD server..."
+kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server 30443:443 \
+  >/dev/null 2>&1 &
+PORT_FORWARD_PID=$!
+trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
 
-# Login to ArgoCD
+# Wait for port forward to be ready
+sleep 2
+
+# Login to ArgoCD via port forward
+success "Logging in to ArgoCD..."
 argocd login --insecure \
   --username admin \
   --password "$ARGOCD_INITIAL_PASS" \
-  --grpc-web "$ARGOCD_SERVER" \
+  --grpc-web "localhost:${ARGOCD_NODE_PORT_HTTPS}" \
   || fail "Failed to login to ArgoCD"
 
 # Update password
+success "Updating admin password..."
 argocd account update-password \
   --insecure \
   --current-password "$ARGOCD_INITIAL_PASS" \
