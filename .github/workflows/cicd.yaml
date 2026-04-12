@@ -61,6 +61,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
+          chmod +x ./.github/scripts/check_changes.sh
           ./.github/scripts/check_changes.sh oci
 
       - name: Setup Terraform
@@ -155,6 +156,8 @@ jobs:
           OCI_REGION: ${{ vars.OCI_REGION }}
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/setup_oci_credentials.sh
           source ./.github/config.sh
           ./.github/scripts/setup_oci_credentials.sh
 
@@ -163,16 +166,22 @@ jobs:
           SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}
           SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/configure_tls_secret.sh
           source ./.github/config.sh
           ./.github/scripts/configure_tls_secret.sh
 
       - name : Install ArgoCD and Kubeseal Sealed Secrets
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/install.sh
           source ./.github/config.sh
           ./.github/scripts/install.sh
 
       - name: Start Argocd
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/argocd_start.sh
           source ./.github/config.sh
           ./.github/scripts/argocd_start.sh
       
@@ -182,10 +191,15 @@ jobs:
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         id: update_argocd_password
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/argocd_updatepwd.sh
+          source ./.github/config.sh
           ./.github/scripts/argocd_updatepwd.sh
       
       - name : Argocd Configuration
         run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/argocd_sa_config.sh
           source ./.github/config.sh
           ./.github/scripts/argocd_sa_config.sh
 
