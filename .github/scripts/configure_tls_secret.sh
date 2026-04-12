@@ -26,9 +26,9 @@ kubectl create secret tls sealed-secrets-key \
   --cert="$SECRETS_PUB_KEY" \
   --key="$SECRETS_PRIV_KEY" \
   -n kube-system \
-  --dry-run=client -o yaml > /tmp/custom-sealed-secret-key.yaml || fail "Failed to create secret manifest"
+  --dry-run=client -o yaml > custom-sealed-secret-key.yaml || fail "Failed to create secret manifest"
 
-kubectl apply -f /tmp/custom-sealed-secret-key.yaml || fail "Failed to apply sealed-secrets secret"
-rm /tmp/custom-sealed-secret-key.yaml
+kubectl apply -f custom-sealed-secret-key.yaml || fail "Failed to apply sealed-secrets secret"
+rm custom-sealed-secret-key.yaml
 
 success "TLS sealed-secrets secret configured"
