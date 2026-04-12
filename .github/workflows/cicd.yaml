@@ -127,8 +127,8 @@ jobs:
   # ============================================================
   # Job 2: OCI and Kubernetes Configuration
   # ============================================================
-  setup-oci-k8s:
-    name: "Setup OCI and Kubernetes Configuration"
+  argocd:
+    name: "Deploy ArgoCD & Bootstrap project"
     needs: oci
     runs-on: ubuntu-latest
     if: | 
@@ -142,14 +142,14 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Check for changes in .github/argocd and .github/scripts
+      - name: Check for changes in .github
         id: filter
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
           chmod +x ./.github/scripts/check_changes.sh
-          ./.github/scripts/check_changes.sh ".github/argocd" ".github/scripts"
+          ./.github/scripts/check_changes.sh ".github"
 
       - name: Install OCI CLI & kubectl
         if: |
