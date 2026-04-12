@@ -7,14 +7,18 @@ on:
     paths:
       - 'oci/**'
       - 'k8s/**'
-      - 'scripts/**'
+      - '.github/scripts/**'
+      - '.github/config.sh'
+      - '.github/workflows/cicd.yaml'
   push:
     branches:
       - main
     paths:
       - 'oci/**'
       - 'k8s/**'
-      - 'scripts/**'
+      - '.github/scripts/**'
+      - '.github/config.sh'
+      - '.github/workflows/cicd.yaml'
   workflow_dispatch:
     inputs:
       action:
@@ -31,6 +35,10 @@ permissions:
   contents: read
   pull-requests: write
 
+concurrency:
+  group: oci-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ============================================================
   # Job 1: OCI Infrastructure (VCN, OKE, etc.)
@@ -40,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
+      nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,29 +61,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
-          CHANGED=false
-          if git diff --name-only HEAD^ HEAD | grep -q "^oci/"; then
-            CHANGED=true
-          fi
-          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
-
-          RUN_PLAN=false
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$CHANGED" = "true" ]; then
-            RUN_PLAN=true
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "plan" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
-            RUN_PLAN=true
-          fi
-          echo "run_plan=$RUN_PLAN" >> $GITHUB_OUTPUT
-
-          RUN_APPLY=false
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$CHANGED" = "true" ]; then
-            RUN_APPLY=true
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "apply" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
-            RUN_APPLY=true
-          fi
-          echo "run_apply=$RUN_APPLY" >> $GITHUB_OUTPUT
+          ./.github/scripts/check_changes.sh oci
 
       - name: Setup Terraform
         if: |
@@ -111,23 +98,44 @@ jobs:
         id: get_cluster_id
         if: steps.filter.outputs.run_apply == 'true' || steps.filter.outputs.run_plan == 'true'
         run: |
-          ID=$(terraform output -raw cluster_id)
-          echo "cluster_id=$ID" >> $GITHUB_OUTPUT
+          CLUSTER_ID=$(terraform output -raw cluster_id)
+          NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
+          echo "cluster_id=$CLUSTER_ID" >> $GITHUB_OUTPUT
+          echo "nlb_public_ip=$NLB_PUBLIC_IP" >> $GITHUB_OUTPUT
+
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
+      - name: Save Terraform Plan (OCI)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oci-terraform-plan-${{ github.run_number }}
+          path: oci/terraform.tfplan
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Job Summary
+        if: always()
+        run: |
+          echo "## OCI Provisioning Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ steps.get_cluster_id.outputs.cluster_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **NLB IP**: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}" >> $GITHUB_STEP_SUMMARY
+
   # ============================================================
-  # Job 2: SA and Secret Script
+  # Job 2: OCI and Kubernetes Configuration
   # ============================================================
-  setup-sa-secrets:
-    name: "Setup SA and Secrets"
+  setup-oci-k8s:
+    name: "Setup OCI and Kubernetes Configuration"
     needs: oci
     runs-on: ubuntu-latest
     if: | 
       always() && 
       needs.oci.result == 'success' &&
-      needs.oci.outputs.cluster_id != ''
+      needs.oci.outputs.cluster_id != '' &&
+      needs.oci.outputs.nlb_public_ip != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -147,112 +155,46 @@ jobs:
           OCI_REGION: ${{ vars.OCI_REGION }}
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
-          mkdir -p ~/.oci
-          REGION="${OCI_REGION:-$DEFAULT_REGION}"
-          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\ntenancy=%s\nregion=%s\nkey_file=%s\n' \
-            "$OCI_USER" "$OCI_FINGERPRINT" "$OCI_TENANCY" "$REGION" "$HOME/.oci/oci_api_key.pem" \
-            > ~/.oci/config
-          printf '%s' "$OCI_PRIVATE_KEY" | tr -d '\r' > ~/.oci/oci_api_key.pem
-          chmod 600 ~/.oci/oci_api_key.pem
-          oci setup repair-file-permissions --file ~/.oci/config 
+          source ./.github/config.sh
+          ./.github/scripts/setup_oci_credentials.sh
 
-      - name: Get Kubeconfig
+      - name: Setup TLS Secret
+        env:
+          SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}
+          SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
         run: |
-          oci ce cluster create-kubeconfig \
-            --cluster-id ${{ needs.oci.outputs.cluster_id }} \
-            --file $HOME/.kube/config \
-            --region ${{ vars.OCI_REGION }} \
-            --token-version 2.0.0 \
-            --kube-endpoint PUBLIC_ENDPOINT
+          source ./.github/config.sh
+          ./.github/scripts/configure_tls_secret.sh
 
-      - name: Run SA and Secret Script
-        id: run_sa_script
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT_SECRET_ADMIN }}
+      - name : Install ArgoCD and Kubeseal Sealed Secrets
         run: |
-          chmod +x ./scripts/setup_sa.sh
-          K8S_TOKEN=$(./scripts/setup_sa.sh)
-          if [ -z "$K8S_TOKEN" ]; then
-            echo "Failed to capture token"
-            exit 1
-          fi
-          gh secret set K8S_CLUSTER_TOKEN --body "$K8S_TOKEN" --repo ${{ github.repository }}
+          source ./.github/config.sh
+          ./.github/scripts/install.sh
 
-  # ============================================================
-  # Job 3: K8s Configuration
-  # ============================================================
-  k8s:
-    name: "K8s Deployment"
-    needs: setup-sa-secrets
-    runs-on: ubuntu-latest
-    if: |
-      always() &&
-      needs.setup-sa-secrets.result == 'success'
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Check for changes in k8s
-        id: filter
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
+      - name: Start Argocd
         run: |
-          CHANGED=false
-          if git diff --name-only HEAD^ HEAD | grep -q "^k8s/"; then
-            CHANGED=true
-          fi
-          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
-
-          RUN_PLAN=false
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$CHANGED" = "true" ]; then
-            RUN_PLAN=true
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "plan" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
-            RUN_PLAN=true
-          fi
-          echo "run_plan=$RUN_PLAN" >> $GITHUB_OUTPUT
-
-          RUN_APPLY=false
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$CHANGED" = "true" ]; then
-            RUN_APPLY=true
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && { [ "$WORKFLOW_INPUT_ACTION" = "apply" ] || [ "$WORKFLOW_INPUT_ACTION" = "plan_and_apply" ]; }; then
-            RUN_APPLY=true
-          fi
-          echo "run_apply=$RUN_APPLY" >> $GITHUB_OUTPUT
-
-      - name: Setup Terraform
-        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
-        uses: hashicorp/setup-terraform@v3
-
-      - name: Create Auto-Vars File
-        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
+          source ./.github/config.sh
+          ./.github/scripts/argocd_start.sh
+      
+      - name: Update ArgoCD Initial Admin Password
         env:
-          RAW_TOKEN: ${{ secrets.K8S_CLUSTER_TOKEN }}
+          NLB_PUBLIC_IP: ${{ needs.oci.outputs.nlb_public_ip }}
+          ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
+        id: update_argocd_password
         run: |
-          mkdir -p k8s
-          jq -n --arg token "$RAW_TOKEN" '{"k8s_token": $token}' > k8s/secrets.auto.tfvars.json
+          ./.github/scripts/argocd_updatepwd.sh
+      
+      - name : Argocd Configuration
+        run: |
+          source ./.github/config.sh
+          ./.github/scripts/argocd_sa_config.sh
 
-      - name: Terraform Init
-        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
-        run: terraform init
-        working-directory: k8s
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-
-      - name: Terraform Plan
-        if: steps.filter.outputs.run_plan == 'true' || steps.filter.outputs.run_apply == 'true'
-        run: terraform plan -no-color -input=false
-        working-directory: k8s
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-
-      - name: Terraform Apply
-        if: steps.filter.outputs.run_apply == 'true'
-        run: terraform apply -auto-approve -input=false
-        working-directory: k8s
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+      - name: K8s Setup Summary
+        if: success()
+        run: |
+          echo "## Kubernetes Setup Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Access ArgoCD at: \`https://${{ needs.oci.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
