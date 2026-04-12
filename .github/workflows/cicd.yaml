@@ -160,6 +160,16 @@ jobs:
           source ./.github/config.sh
           ./.github/scripts/setup_oci_credentials.sh
 
+      - name: Generate Kubeconfig
+        env:
+          CLUSTER_ID: ${{ needs.oci.outputs.cluster_id }}
+          REGION: ${{ vars.OCI_REGION }}
+        run: |
+          chmod +x ./.github/config.sh
+          chmod +x ./.github/scripts/kubeconfig.sh
+          source ./.github/config.sh
+          ./.github/scripts/kubeconfig.sh
+
       - name: Setup TLS Secret
         env:
           SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}

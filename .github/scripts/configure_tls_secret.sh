@@ -22,13 +22,17 @@ chmod 600 "$SECRETS_PRIV_KEY" || fail "Failed to set private key permissions"
 
 # Create secret using sealed-secrets keys
 require_cmd "kubectl"
+
+# Use temporary file with cleanup
+TEMP_SECRET=$(mktemp) || fail "Failed to create temporary file"
+trap "rm -f $TEMP_SECRET" EXIT
+
 kubectl create secret tls sealed-secrets-key \
   --cert="$SECRETS_PUB_KEY" \
   --key="$SECRETS_PRIV_KEY" \
   -n kube-system \
-  --dry-run=client -o yaml > custom-sealed-secret-key.yaml || fail "Failed to create secret manifest"
+  --dry-run=client -o yaml > "$TEMP_SECRET" || fail "Failed to create secret manifest"
 
-kubectl apply -f custom-sealed-secret-key.yaml || fail "Failed to apply sealed-secrets secret"
-rm custom-sealed-secret-key.yaml
+kubectl apply -f "$TEMP_SECRET" || fail "Failed to apply sealed-secrets secret"
 
 success "TLS sealed-secrets secret configured"
