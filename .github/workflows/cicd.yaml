@@ -97,13 +97,12 @@ jobs:
       
       - name: Export Cluster ID
         id: get_cluster_id
-        if: steps.filter.outputs.run_apply == 'true' || steps.filter.outputs.run_plan == 'true'
+        if: steps.filter.outputs.run_apply == 'true'
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
           echo "cluster_id=$CLUSTER_ID" >> $GITHUB_OUTPUT
           echo "nlb_public_ip=$NLB_PUBLIC_IP" >> $GITHUB_OUTPUT
-
         working-directory: oci
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
