@@ -8,7 +8,15 @@ source "$SCRIPT_DIR/config.sh"
 
 require_cmd "kubectl"
 
-# Wait for ArgoCD to be ready
+# Check if ArgoCD is already running and healthy
+if kubectl get namespace "$ARGOCD_HELM_NAMESPACE" >/dev/null 2>&1; then
+  if kubectl rollout status -n "$ARGOCD_HELM_NAMESPACE" deployment/argocd-server \
+    --timeout=5s >/dev/null 2>&1; then
+    success "ArgoCD is already running and healthy"
+    exit 0
+  fi
+fi
+
 success "Waiting for ArgoCD to be ready (timeout: ${ROLLOUT_TIMEOUT})..."
 kubectl rollout status -n "$ARGOCD_HELM_NAMESPACE" sts/argocd-application-controller \
   --timeout="$ROLLOUT_TIMEOUT" \

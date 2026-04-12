@@ -32,23 +32,33 @@ trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
 # Wait for port forward to be ready
 sleep 2
 
-# Login to ArgoCD via port forward
-success "Logging in to ArgoCD..."
-argocd login --insecure \
+# Check if password was already updated (try new password first)
+success "Checking if admin password needs updating..."
+if argocd login --insecure \
   --username admin \
-  --password "$ARGOCD_INITIAL_PASS" \
+  --password "$ARGOCD_ADMIN_PASSWORD" \
   --grpc-web "localhost:${ARGOCD_NODE_PORT_HTTPS}" \
-  || fail "Failed to login to ArgoCD"
+  >/dev/null 2>&1; then
+  success "ArgoCD admin password already configured"
+else
+  # Login with initial password and update
+  success "Logging in to ArgoCD..."
+  argocd login --insecure \
+    --username admin \
+    --password "$ARGOCD_INITIAL_PASS" \
+    --grpc-web "localhost:${ARGOCD_NODE_PORT_HTTPS}" \
+    || fail "Failed to login to ArgoCD"
 
-# Update password
-success "Updating admin password..."
-argocd account update-password \
-  --insecure \
-  --current-password "$ARGOCD_INITIAL_PASS" \
-  --new-password "$ARGOCD_ADMIN_PASSWORD" \
-  || fail "Failed to update ArgoCD password"
+  # Update password
+  success "Updating admin password..."
+  argocd account update-password \
+    --insecure \
+    --current-password "$ARGOCD_INITIAL_PASS" \
+    --new-password "$ARGOCD_ADMIN_PASSWORD" \
+    || fail "Failed to update ArgoCD password"
 
-success "ArgoCD password updated"
+  success "ArgoCD password updated"
+fi
 
 # Patch ArgoCD ConfigMap with external URL
 success "Patching ArgoCD ConfigMap with external URL..."
