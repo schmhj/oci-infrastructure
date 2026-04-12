@@ -12,7 +12,7 @@ data "oci_containerengine_node_pool_option" "oke_node_pool_options" {
   compartment_id      = var.compartment_id
 }
 
-# Fetch kubeconfig via dedicated data source
+# Fetch kubeconfig via dedicated data source (used by k8s/ stage to extract endpoint and CA)
 data "oci_containerengine_cluster_kube_config" "oke_kubeconfig" {
   cluster_id = oci_containerengine_cluster.oke.id
   token_version = "2.0.0"
@@ -86,10 +86,4 @@ resource "oci_containerengine_node_pool" "workers" {
     value = local.name_oke
   }
 
-}
-
-resource "local_file" "kubeconfig" {
-  content         = data.oci_containerengine_cluster_kube_config.oke_kubeconfig.content
-  filename        = pathexpand("~/.kube/oke-config")
-  file_permission = "0600"
 }
