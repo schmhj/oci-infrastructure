@@ -13,6 +13,8 @@ export ARGOCD_HELM_CHART="argo/argo-cd"
 export ARGOCD_HELM_NAMESPACE="argocd"
 export ARGOCD_NODE_PORT=30443
 export ARGOCD_NODE_PORT_HTTPS=30443
+export ARGOCD_CLI_VERSION="2.14.1"
+export ARGOCD_CLI_PLATFORM="linux-amd64"
 
 # ============================================================
 # Kubeseal (Sealed Secrets) Configuration
