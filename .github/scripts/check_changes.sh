@@ -2,14 +2,16 @@
 
 set -euo pipefail
 
-# Usage: check_changes.sh <path-prefix>
+# Usage: check_changes.sh <path-prefix> [<path-prefix2> ...]
 # Example: check_changes.sh oci
+# Example: check_changes.sh ".github/argocd" ".github/scripts"
 
-PREFIX=${1:-}
-if [ -z "$PREFIX" ]; then
-  echo "Usage: $0 <path-prefix>" >&2
+if [ $# -eq 0 ]; then
+  echo "Usage: $0 <path-prefix> [<path-prefix2> ...]" >&2
   exit 2
 fi
+
+PREFIXES=("$@")
 
 # Provide default values when run outside GitHub Actions for local testing
 GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME:-${GITHUB_EVENT_NAME:-}}
@@ -20,17 +22,23 @@ if [ -z "${GITHUB_EVENT_NAME:-}" ]; then
   GITHUB_EVENT_NAME="local"
 fi
 
-# Safely handle case where HEAD^ does not exist (first commit)
+# Check if any of the provided prefixes have changed
 CHANGED=false
 if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-  if git diff --name-only HEAD^ HEAD | grep -q "^${PREFIX}/"; then
-    CHANGED=true
-  fi
+  for PREFIX in "${PREFIXES[@]}"; do
+    if git diff --name-only HEAD^ HEAD | grep -q "^${PREFIX}/"; then
+      CHANGED=true
+      break
+    fi
+  done
 else
-  # No previous commit — treat as changed if prefix exists in tree
-  if git ls-files | grep -q "^${PREFIX}/"; then
-    CHANGED=true
-  fi
+  # No previous commit — treat as changed if any prefix exists in tree
+  for PREFIX in "${PREFIXES[@]}"; do
+    if git ls-files | grep -q "^${PREFIX}/"; then
+      CHANGED=true
+      break
+    fi
+  done
 fi
 
 echo "changed=$CHANGED" >> "${GITHUB_OUTPUT:-/dev/stdout}"
