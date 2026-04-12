@@ -6,8 +6,8 @@ on:
       - main
     paths:
       - 'oci/**'
-      - 'k8s/**'
       - '.github/scripts/**'
+      - '.github/argocd/**'
       - '.github/config.sh'
       - '.github/workflows/cicd.yaml'
   push:
@@ -15,8 +15,8 @@ on:
       - main
     paths:
       - 'oci/**'
-      - 'k8s/**'
       - '.github/scripts/**'
+      - '.github/argocd/**'
       - '.github/config.sh'
       - '.github/workflows/cicd.yaml'
   workflow_dispatch:
@@ -139,14 +139,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for changes in .github/argocd and .github/scripts
+        id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
+        run: |
+          chmod +x ./.github/scripts/check_changes.sh
+          ./.github/scripts/check_changes.sh ".github/argocd" ".github/scripts"
 
       - name: Install OCI CLI & kubectl
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y python3-pip
           pip3 install --upgrade oci-cli
 
       - name: Setup OCI credentials
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         env:
           OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
           OCI_USER: ${{ secrets.OCI_USER_OCID }}
@@ -159,6 +176,9 @@ jobs:
           ./.github/scripts/setup_oci_credentials.sh
 
       - name: Generate Kubeconfig
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         env:
           CLUSTER_ID: ${{ needs.oci.outputs.cluster_id }}
           REGION: ${{ vars.OCI_REGION }}
@@ -167,6 +187,9 @@ jobs:
           ./.github/scripts/kubeconfig.sh
 
       - name: Setup TLS Secret
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         env:
           SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}
           SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
@@ -175,16 +198,25 @@ jobs:
           ./.github/scripts/configure_tls_secret.sh
 
       - name : Install ArgoCD and Kubeseal Sealed Secrets
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         run: |
           chmod +x ./.github/scripts/install.sh
           ./.github/scripts/install.sh
 
       - name: Start Argocd
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         run: |
           chmod +x ./.github/scripts/argocd_start.sh
           ./.github/scripts/argocd_start.sh
 
       - name: Update ArgoCD Initial Admin Password
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         env:
           NLB_PUBLIC_IP: ${{ needs.oci.outputs.nlb_public_ip }}
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
@@ -194,12 +226,18 @@ jobs:
           ./.github/scripts/argocd_updatepwd.sh
 
       - name : Argocd Configuration
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
         run: |
           chmod +x ./.github/scripts/argocd_sa_config.sh
           ./.github/scripts/argocd_sa_config.sh
 
       - name: K8s Setup Summary
-        if: success()
+        if: |
+          success() &&
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true')
         run: |
           echo "## Kubernetes Setup Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -207,4 +245,77 @@ jobs:
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Access ArgoCD at: \`https://${{ needs.oci.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
-  
+
+  # ============================================================
+  # Job 3: Bootstrap ArgoCD with cluster-config
+  # ============================================================
+  bootstrap-argocd:
+    name: "Bootstrap ArgoCD"
+    needs: [oci, setup-oci-k8s]
+    runs-on: ubuntu-latest
+    if: needs.setup-oci-k8s.result == 'success'
+    steps:
+      - name: Checkout cluster-config repo
+        uses: actions/checkout@v4
+        with:
+          repository: schmhj/cluster-config
+          ref: main
+          token: ${{ secrets.GH_PAT_SECRET_ADMIN }}
+
+      - name: Check for changes in .github/argocd and .github/scripts
+        id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
+        run: |
+          chmod +x ./.github/scripts/check_changes.sh
+          ./.github/scripts/check_changes.sh ".github/argocd" ".github/scripts"
+
+      - name: Install OCI CLI & kubectl
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install --upgrade oci-cli
+
+      - name: Setup OCI credentials
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
+        run: |
+          chmod +x ./.github/scripts/setup_oci_credentials.sh
+          ./.github/scripts/setup_oci_credentials.sh
+
+      - name: Generate Kubeconfig
+        if: |
+          steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true'
+        env:
+          CLUSTER_ID: ${{ needs.oci.outputs.cluster_id }}
+          REGION: ${{ vars.OCI_REGION }}
+        run: |
+          chmod +x ./.github/scripts/kubeconfig.sh
+          ./.github/scripts/kubeconfig.sh
+
+      - name: Apply AppProjects App
+        run: kubectl apply -f bootstrap/prod/appprojects-app.yaml
+
+      - name: Apply Root App
+        run: kubectl apply -f bootstrap/prod/root-app.yaml
+
+      - name: Bootstrap Summary
+        if: success()
+        run: |
+          echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ AppProjects app deployed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Root app deployed" >> $GITHUB_STEP_SUMMARY
