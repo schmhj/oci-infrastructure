@@ -10,6 +10,16 @@ source "$SCRIPT_DIR/config.sh"
 require_env "SECRETS_PRIVATE_KEY"
 require_env "SECRETS_PUBLIC_KEY"
 
+require_cmd "kubectl"
+
+# Check if sealed-secrets secret already exists
+if kubectl get secret sealed-secrets-key -n kube-system >/dev/null 2>&1; then
+  success "Sealed-secrets TLS secret already configured"
+  exit 0
+fi
+
+success "Setting up sealed-secrets TLS secret..."
+
 SECRETS_DIR="$HOME/.secrets"
 SECRETS_PRIV_KEY="${SECRETS_DIR}/sealed-secrets"
 SECRETS_PUB_KEY="${SECRETS_DIR}/sealed-secrets.pub"

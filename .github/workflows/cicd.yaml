@@ -207,3 +207,4 @@ jobs:
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Access ArgoCD at: \`https://${{ needs.oci.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
+  
