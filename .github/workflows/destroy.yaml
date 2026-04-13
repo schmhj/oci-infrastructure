@@ -1,0 +1,228 @@
+name: OKE Cluster Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster_id:
+        description: 'OKE Cluster OCID to destroy'
+        required: true
+        type: string
+      action:
+        description: 'Type DESTROY to confirm destruction'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oci-destroy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ============================================================
+  # Guard 1: Validate action keyword and cluster_id format
+  # ============================================================
+  validate:
+    name: "Validate Destroy Inputs"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check DESTROY confirmation and cluster_id
+        run: |
+          if [[ "${{ github.event.inputs.action }}" != "DESTROY" ]]; then
+            echo "❌ Action must be exactly 'DESTROY' to proceed. Got: '${{ github.event.inputs.action }}'"
+            exit 1
+          fi
+          if [[ -z "${{ github.event.inputs.cluster_id }}" ]]; then
+            echo "❌ cluster_id must not be empty."
+            exit 1
+          fi
+          # OKE cluster OCIDs always follow: ocid1.cluster.oc1.<region>.<unique>
+          if [[ ! "${{ github.event.inputs.cluster_id }}" =~ ^ocid1\.cluster\.oc1\..+ ]]; then
+            echo "❌ cluster_id does not look like a valid OKE OCID: '${{ github.event.inputs.cluster_id }}'"
+            echo "   Expected format: ocid1.cluster.oc1.<region>.<unique_id>"
+            exit 1
+          fi
+          echo "✅ Inputs validated. Cluster ID: ${{ github.event.inputs.cluster_id }}"
+
+  # ============================================================
+  # Guard 2: Confirm the cluster actually exists in OCI
+  # ============================================================
+  verify-cluster:
+    name: "Verify Cluster Exists in OCI"
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OCI CLI
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install --upgrade oci-cli
+
+      - name: Setup OCI credentials
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
+        run: |
+          chmod +x ./.github/scripts/setup_oci_credentials.sh
+          ./.github/scripts/setup_oci_credentials.sh
+
+      - name: Check cluster exists in OCI
+        env:
+          CLUSTER_ID: ${{ github.event.inputs.cluster_id }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+        run: |
+          echo "Looking up cluster: $CLUSTER_ID"
+
+          CLUSTER_JSON=$(oci ce cluster get \
+            --cluster-id "$CLUSTER_ID" \
+            --region "$OCI_REGION" \
+            2>&1) || true
+
+          # Treat a 404 / ServiceError as a hard failure
+          if echo "$CLUSTER_JSON" | grep -q "ServiceError"; then
+            echo "❌ OCI returned a service error for cluster '$CLUSTER_ID':"
+            echo "$CLUSTER_JSON"
+            exit 1
+          fi
+
+          LIFECYCLE=$(echo "$CLUSTER_JSON" \
+            | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['lifecycle-state'])" 2>/dev/null || echo "")
+
+          if [[ -z "$LIFECYCLE" ]]; then
+            echo "❌ Could not retrieve cluster state. Cluster '$CLUSTER_ID' may not exist or is inaccessible."
+            exit 1
+          fi
+
+          echo "✅ Cluster found. Current lifecycle state: $LIFECYCLE"
+
+          # Refuse to destroy a cluster that is already being deleted
+          if [[ "$LIFECYCLE" == "DELETING" || "$LIFECYCLE" == "DELETED" ]]; then
+            echo "❌ Cluster is already in state '$LIFECYCLE'. Aborting to avoid conflict."
+            exit 1
+          fi
+
+          echo "✅ Cluster '$CLUSTER_ID' confirmed active. Proceeding with destroy."
+
+      - name: Verify Summary
+        if: always()
+        run: |
+          echo "## Cluster Verification" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ github.event.inputs.cluster_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ vars.OCI_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # Job 1: Gracefully remove ArgoCD apps and projects
+  # ============================================================
+  argocd-destroy:
+    name: "Destroy ArgoCD Apps & Projects"
+    needs: verify-cluster
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OCI CLI
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install --upgrade oci-cli
+
+      - name: Setup OCI credentials
+        env:
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+          OCI_USER: ${{ secrets.OCI_USER_OCID }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
+        run: |
+          chmod +x ./.github/scripts/setup_oci_credentials.sh
+          ./.github/scripts/setup_oci_credentials.sh
+
+      - name: Generate Kubeconfig
+        env:
+          CLUSTER_ID: ${{ github.event.inputs.cluster_id }}
+          REGION: ${{ vars.OCI_REGION }}
+        run: |
+          chmod +x ./.github/scripts/kubeconfig.sh
+          ./.github/scripts/kubeconfig.sh
+
+      - name: Delete ArgoCD Root App
+        env:
+          ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
+        run: |
+          chmod +x ./.github/scripts/argocd_delete_root_app.sh
+          ./.github/scripts/argocd_delete_root_app.sh
+
+      - name: Delete ArgoCD AppProjects
+        env:
+          ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
+        run: |
+          chmod +x ./.github/scripts/argocd_delete_projects.sh
+          ./.github/scripts/argocd_delete_projects.sh
+
+      - name: Uninstall ArgoCD & Sealed Secrets
+        run: |
+          chmod +x ./.github/scripts/argocd_uninstall.sh
+          ./.github/scripts/argocd_uninstall.sh
+
+      - name: ArgoCD Destroy Summary
+        if: always()
+        run: |
+          echo "## ArgoCD Destroy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ github.event.inputs.cluster_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Root App**: deleted" >> $GITHUB_STEP_SUMMARY
+          echo "- **AppProjects**: deleted" >> $GITHUB_STEP_SUMMARY
+          echo "- **ArgoCD / Sealed Secrets**: uninstalled" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================
+  # Job 2: Destroy OCI infrastructure via Terraform
+  # ============================================================
+  oci-destroy:
+    name: "Destroy OCI Cluster"
+    needs: argocd-destroy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform Init
+        run: terraform init
+        working-directory: oci
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+
+      - name: Terraform Plan Destroy
+        run: terraform plan -destroy -no-color -input=false
+        working-directory: oci
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve -input=false
+        working-directory: oci
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+
+      - name: OCI Destroy Summary
+        if: always()
+        run: |
+          echo "## OCI Destroy Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ github.event.inputs.cluster_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by**: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
