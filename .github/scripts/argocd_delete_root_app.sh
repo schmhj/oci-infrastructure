@@ -90,14 +90,14 @@ else
   log "ArgoCD CLI installed: $(argocd version --client --short)"
 fi
 
-# ── Wait for ArgoCD server pod to be Ready ────────────────────
-# Port-forwarding against a non-Running pod binds the local port
-# but immediately drops the tunnel, causing "connection refused".
-log "Waiting for ArgoCD server pod to be Ready..."
-kubectl wait pod \
+# ── Wait for ArgoCD server to be Ready ───────────────────────
+# 'kubectl wait pod' fails immediately with "no matching resources"
+# when no pod exists yet (e.g. deployment still creating it).
+# 'kubectl rollout status' correctly blocks until the deployment
+# has at least one Ready replica, regardless of current pod count.
+log "Waiting for ArgoCD server deployment to be Available..."
+kubectl rollout status deployment/argocd-server \
   -n "$ARGOCD_NAMESPACE" \
-  -l "app.kubernetes.io/name=argocd-server" \
-  --for=condition=Ready \
   --timeout=120s
 
 # ── Port-forward (skip if port already open) ──────────────────
