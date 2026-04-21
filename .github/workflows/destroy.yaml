@@ -206,9 +206,9 @@ jobs:
         id: select-workdir
         run: |
           if [[ "${{ inputs.environment }}" == "oke-us-ashburn" ]]; then
-            echo "WORK_DIR=us-ashburn" >> $GITHUB_OUTPUT
+            echo "WORK_DIR=environments/us-ashburn" >> "$GITHUB_OUTPUT"
           elif [[ "${{ inputs.environment }}" == "oke-us-chicago" ]]; then
-            echo "WORK_DIR=us-chicago" >> $GITHUB_OUTPUT
+            echo "WORK_DIR=environments/us-chicago" >> "$GITHUB_OUTPUT"
           else
             echo "❌ Unknown environment: ${{ inputs.environment }}"
             exit 1
