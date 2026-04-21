@@ -1,5 +1,5 @@
 data "oci_identity_availability_domains" "ads" {
-  compartment_id = var.compartment_id
+  compartment_id = var.tenancy_ocid
 }
 
 data "oci_containerengine_cluster_option" "oke_options" {
