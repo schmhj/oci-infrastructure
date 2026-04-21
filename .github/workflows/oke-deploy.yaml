@@ -185,6 +185,9 @@ jobs:
           - region: us-ashburn-1
             environment: oke-us-ashburn
             working_dir: environments/us-ashburn
+          - region: us-chicago-1
+            environment: oke-us-chicago
+            working_dir: environments/us-chicago
     steps:
       - name: Checkout
         uses: actions/checkout@v4
