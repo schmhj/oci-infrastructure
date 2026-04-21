@@ -11,7 +11,12 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
-PREFIXES=("$@")
+# Convert all input paths to absolute paths
+PREFIXES=()
+for dir in "$@"; do
+  abs_path=$(realpath "$dir")
+  PREFIXES+=("$abs_path")
+done
 
 # Provide default values when run outside GitHub Actions for local testing
 GITHUB_EVENT_NAME=${GITHUB_EVENT_NAME:-${GITHUB_EVENT_NAME:-}}
@@ -22,10 +27,18 @@ if [ -z "${GITHUB_EVENT_NAME:-}" ]; then
   GITHUB_EVENT_NAME="local"
 fi
 
+# Get git root and convert absolute paths to relative paths from git root
+GIT_ROOT=$(git rev-parse --show-toplevel)
+RELATIVE_PREFIXES=()
+for abs_path in "${PREFIXES[@]}"; do
+  rel_path="${abs_path#$GIT_ROOT/}"
+  RELATIVE_PREFIXES+=("$rel_path")
+done
+
 # Check if any of the provided prefixes have changed
 CHANGED=false
 if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
-  for PREFIX in "${PREFIXES[@]}"; do
+  for PREFIX in "${RELATIVE_PREFIXES[@]}"; do
     if git diff --name-only HEAD^ HEAD | grep -q "^${PREFIX}/"; then
       CHANGED=true
       break
@@ -33,7 +46,7 @@ if git rev-parse --verify HEAD^ >/dev/null 2>&1; then
   done
 else
   # No previous commit — treat as changed if any prefix exists in tree
-  for PREFIX in "${PREFIXES[@]}"; do
+  for PREFIX in "${RELATIVE_PREFIXES[@]}"; do
     if git ls-files | grep -q "^${PREFIX}/"; then
       CHANGED=true
       break
