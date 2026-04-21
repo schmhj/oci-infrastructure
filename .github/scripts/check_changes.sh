@@ -14,6 +14,9 @@ fi
 # Convert all input paths to absolute paths
 PREFIXES=()
 for dir in "$@"; do
+  if [ ! -e "$dir" ]; then
+    fail "Path does not exist: $dir"
+  fi
   abs_path=$(realpath "$dir")
   PREFIXES+=("$abs_path")
 done
