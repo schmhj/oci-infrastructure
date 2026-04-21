@@ -1,6 +1,6 @@
 locals {
   # Naming convention base
-  base_name = "${var.org}-${var.environment}-${var.region}"
+  base_name = "${var.org}-${var.region}"
 
   # Resource name prefixes for consistent naming
   prefixes = {
@@ -14,18 +14,18 @@ locals {
   }
 
   # VCN resources
-  name_vcn       = "${local.prefixes.vcn}-${var.org}-${var.environment}-${var.region}"
-  name_vcn_dns   = "${local.prefixes.vcn}-${var.org}-${var.environment}"
-  name_snet_pub  = "${local.prefixes.snet_pub}-${var.org}-${var.environment}-${var.region}"
-  name_snet_priv = "${local.prefixes.snet_priv}-${var.org}-${var.environment}-${var.region}"
+  name_vcn       = "${local.prefixes.vcn}-${var.org}-${var.region}"
+  name_vcn_dns   = "${local.prefixes.vcn}-${var.org}-${var.region}-dns"
+  name_snet_pub  = "${local.prefixes.snet_pub}-${var.org}-${var.region}"
+  name_snet_priv = "${local.prefixes.snet_priv}-${var.org}-${var.region}"
 
   # OKE resources
-  name_oke = "${local.prefixes.oke}-${var.org}-${var.environment}-${var.region}"
-  name_np  = "${local.prefixes.np}-${var.org}-${var.environment}-${var.region}"
-  name_nsg = "${local.prefixes.nsg}-${var.org}-${var.environment}-${var.region}"
+  name_oke = "${local.prefixes.oke}-${var.org}-${var.region}"
+  name_np  = "${local.prefixes.np}-${var.org}-${var.region}"
+  name_nsg = "${local.prefixes.nsg}-${var.org}-${var.region}"
 
   # Load balancer
-  name_nlb = "${local.prefixes.nlb}-${var.org}-${var.environment}-${var.region}"
+  name_nlb = "${local.prefixes.nlb}-${var.org}-${var.region}"
 
   # Kubernetes network configuration
   pods_cidr     = "10.244.0.0/16"
