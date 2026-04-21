@@ -61,6 +61,7 @@ jobs:
             environment: production-us-ashburn
             tf_workspace: oke-us-ashburn
             working_dir: environments/us-ashburn
+            module_path: modules/oke
     outputs:
       cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
       nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
@@ -77,8 +78,7 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
-          chmod +x ./.github/scripts/check_changes.sh
-          ./.github/scripts/check_changes.sh ${{ matrix.working_dir }}
+          ./.github/scripts/check_changes.sh ${{ matrix.working_dir }} ${{matrix.module_path}}
 
       - name: Setup Terraform
         if: |
@@ -131,44 +131,13 @@ jobs:
 
             sleep $((attempt * 10))
           done
-       
-      - name: Generate CI Terraform Variables
-        if: |
-          steps.filter.outputs.run_plan == 'true' || 
-          steps.filter.outputs.run_apply == 'true'
-        working-directory: ${{ matrix.working_dir }}
-        run: |
-          cat > ci.auto.tfvars <<EOF
-          compartment_id = "${{ secrets.OCI_COMPARTMENT_OCID }}"
-          tenancy_ocid = "${{ secrets.OCI_TENANCY_OCID }}"
-          user_ocid = "${{ secrets.OCI_USER_OCID }}"
-          fingerprint = "${{ secrets.OCI_FINGERPRINT }}"
-          private_key = <<EOT
-          ${{ secrets.OCI_PRIVATE_KEY }}
-          EOT
-          region = "${{ vars.OCI_REGION }}"
-          environment = "${{ matrix.environment }}"
-          EOF
-          
+           
       - name: Terraform Plan
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
         run: terraform plan -no-color -input=false
-
-      - name: Post plan to PR
-        if: github.event_name == 'pull_request' && steps.filter.outputs.run_plan == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const plan = require('fs').readFileSync('plan.txt', 'utf8');
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `### Terraform Plan — \`${{ matrix.region }}\`\n\`\`\`\n${plan.slice(0, 65000)}\n\`\`\``
-            });
         
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
@@ -226,7 +195,6 @@ jobs:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
-          chmod +x ./.github/scripts/check_changes.sh
           ./.github/scripts/check_changes.sh ".github"
 
       - name: Install OCI CLI & kubectl
@@ -250,7 +218,6 @@ jobs:
           OCI_REGION: ${{ vars.OCI_REGION }}
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
-          chmod +x ./.github/scripts/setup_oci_credentials.sh
           ./.github/scripts/setup_oci_credentials.sh
 
       - name: Generate Kubeconfig
@@ -261,7 +228,6 @@ jobs:
           CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
-          chmod +x ./.github/scripts/kubeconfig.sh
           ./.github/scripts/kubeconfig.sh
 
       - name: Setup TLS Secret
@@ -272,7 +238,6 @@ jobs:
           SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}
           SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
         run: |
-          chmod +x ./.github/scripts/configure_tls_secret.sh
           ./.github/scripts/configure_tls_secret.sh
 
       - name : Install ArgoCD and Kubeseal Sealed Secrets
@@ -280,7 +245,6 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         run: |
-          chmod +x ./.github/scripts/install.sh
           ./.github/scripts/install.sh
 
       - name: Start Argocd
@@ -288,7 +252,6 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         run: |
-          chmod +x ./.github/scripts/argocd_start.sh
           ./.github/scripts/argocd_start.sh
 
       - name: Update ArgoCD Initial Admin Password
@@ -300,7 +263,6 @@ jobs:
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         id: update_argocd_password
         run: |
-          chmod +x ./.github/scripts/argocd_updatepwd.sh
           ./.github/scripts/argocd_updatepwd.sh
 
       - name : Argocd Configuration
@@ -308,7 +270,6 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         run: |
-          chmod +x ./.github/scripts/argocd_sa_config.sh
           ./.github/scripts/argocd_sa_config.sh
 
       - name: K8s Setup Summary
@@ -342,7 +303,11 @@ jobs:
         run: |
           echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ AppProjects app deployed" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Root app deployed" >> $GITHUB_STEP_SUMMARY  
+          echo "✅  AppProjects app deployed" >> $GITHUB_STEP_SUMMARY
+          echo "✅  Root app deployed" >> $GITHUB_STEP_SUMMARY  
       
-  
+      - name: Clean up
+        if: always()
+        run: |
+          rm -rf ~/.kube
+          rm -rf ~/.oci
