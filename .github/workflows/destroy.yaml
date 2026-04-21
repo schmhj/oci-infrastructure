@@ -55,8 +55,8 @@ jobs:
   # ============================================================
   # Guard 2: Confirm the cluster actually exists in OCI
   # ============================================================
-  verify-cluster:
-    name: "Verify Cluster Exists in OCI"
+  verify-oke-cluster:
+    name: "Verify OKE Cluster Exists in OCI"
     needs: validate
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -133,7 +133,7 @@ jobs:
   # ============================================================
   argocd-destroy:
     name: "Destroy ArgoCD Apps & Projects"
-    needs: verify-cluster
+    needs: verify-oke-cluster
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
@@ -193,8 +193,8 @@ jobs:
   # ============================================================
   # Job 2: Destroy OCI infrastructure via Terraform
   # ============================================================
-  oci-destroy:
-    name: "Destroy OCI Cluster"
+  oke-destroy:
+    name: "Destroy OKE Cluster - ${{ inputs.environment }}"
     needs: argocd-destroy
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -202,6 +202,18 @@ jobs:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
     steps:
+      - name: Determine working directory based on environment
+        id: select-workdir
+        run: |
+          if [[ "${{ inputs.environment }}" == "oke-us-ashburn" ]]; then
+            echo "WORK_DIR=us-ashburn" >> $GITHUB_OUTPUT
+          elif [[ "${{ inputs.environment }}" == "oke-us-chicago" ]]; then
+            echo "WORK_DIR=us-chicago" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Unknown environment: ${{ inputs.environment }}"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -209,16 +221,15 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        working-directory: ${{ inputs.environment }}
+        working-directory: ${{ steps.select-workdir.outputs.WORK_DIR }}
         run: terraform init
         
       - name: Terraform Plan Destroy
-        working-directory: ${{ inputs.environment }}
+        working-directory: ${{ steps.select-workdir.outputs.WORK_DIR }}
         run: terraform plan -destroy -no-color -input=false
         
-
       - name: Terraform Destroy
-        working-directory: ${{ inputs.environment }}
+        working-directory: ${{ steps.select-workdir.outputs.WORK_DIR }}
         run: terraform destroy -auto-approve -input=false
         
       - name: OCI Destroy Summary
