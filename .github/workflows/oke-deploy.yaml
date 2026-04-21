@@ -61,6 +61,10 @@ jobs:
             environment: oke-us-ashburn
             working_dir: environments/us-ashburn
             module_path: modules/oke
+          - region: us-chicago-1
+            environment: oke-us-chicago
+            working_dir: environments/us-chicago
+            module_path: modules/oke
     outputs:
       cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
       nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
