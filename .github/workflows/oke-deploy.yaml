@@ -230,7 +230,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id }}
+          CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id[matrix.region] }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
           ./.github/scripts/kubeconfig.sh
