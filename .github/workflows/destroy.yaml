@@ -25,7 +25,7 @@ jobs:
   # ============================================================
   validate:
     name: "Validate Destroy Inputs"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest        
     steps:
       - name: Check DESTROY confirmation and cluster_id
         run: |
@@ -52,6 +52,13 @@ jobs:
     name: "Verify Cluster Exists in OCI"
     needs: validate
     runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: production-us-ashburn
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -71,7 +78,6 @@ jobs:
           OCI_REGION: ${{ vars.OCI_REGION }}
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
-          chmod +x ./.github/scripts/setup_oci_credentials.sh
           ./.github/scripts/setup_oci_credentials.sh
 
       - name: Check cluster exists in OCI
@@ -127,6 +133,13 @@ jobs:
     name: "Destroy ArgoCD Apps & Projects"
     needs: verify-cluster
     runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: production-us-ashburn
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -146,7 +159,6 @@ jobs:
           OCI_REGION: ${{ vars.OCI_REGION }}
           DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
         run: |
-          chmod +x ./.github/scripts/setup_oci_credentials.sh
           ./.github/scripts/setup_oci_credentials.sh
 
       - name: Generate Kubeconfig
@@ -154,26 +166,22 @@ jobs:
           CLUSTER_ID: ${{ github.event.inputs.cluster_id }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
-          chmod +x ./.github/scripts/kubeconfig.sh
           ./.github/scripts/kubeconfig.sh
 
       - name: Delete ArgoCD Root App
         env:
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         run: |
-          chmod +x ./.github/scripts/argocd_delete_root_app.sh
           ./.github/scripts/argocd_delete_root_app.sh
 
       - name: Delete ArgoCD AppProjects
         env:
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         run: |
-          chmod +x ./.github/scripts/argocd_delete_projects.sh
           ./.github/scripts/argocd_delete_projects.sh
 
       - name: Uninstall ArgoCD & Sealed Secrets
         run: |
-          chmod +x ./.github/scripts/argocd_uninstall.sh
           ./.github/scripts/argocd_uninstall.sh
 
       - name: ArgoCD Destroy Summary
@@ -193,6 +201,16 @@ jobs:
     name: "Destroy OCI Cluster"
     needs: argocd-destroy
     runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: production-us-ashburn
+            tf_workspace: "oke-us-ashburn"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -201,23 +219,18 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
+        working-directory: ${{ matrix.tf_workspace }}
         run: terraform init
-        working-directory: oci
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-
+        
       - name: Terraform Plan Destroy
+        working-directory: ${{ matrix.tf_workspace }}
         run: terraform plan -destroy -no-color -input=false
-        working-directory: oci
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+        
 
       - name: Terraform Destroy
+        working-directory: ${{ matrix.tf_workspace }}
         run: terraform destroy -auto-approve -input=false
-        working-directory: oci
-        env:
-          TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-
+        
       - name: OCI Destroy Summary
         if: always()
         run: |
