@@ -1,4 +1,4 @@
-name: OKE Cluster Deploy Infrastructure
+name: OKE Multi-Region Cluster Deployment
 
 on:
   pull_request:
@@ -21,6 +21,7 @@ on:
       - '.github/argocd/**'
       - '.github/config.sh'
       - '.github/workflows/cicd.yaml'
+
   workflow_dispatch:
     inputs:
       action:
@@ -55,7 +56,7 @@ jobs:
           - region: us-ashburn-1
             env: production
             tf_workspace: oke-us-ashburn
-            working_dir: environments/oke/us-ashburn
+            working_dir: environments/us-ashburn
 
     environment: ${{ matrix.env }}
     outputs:

@@ -40,7 +40,6 @@ variable "region" {
 
 
 # Region-specific variables for OKE module
-
 variable "cluster_name" {
   description = "The name of the Kubernetes cluster."
   type        = string
