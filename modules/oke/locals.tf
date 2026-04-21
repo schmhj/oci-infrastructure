@@ -15,7 +15,7 @@ locals {
 
   # VCN resources
   name_vcn       = "${local.prefixes.vcn}-${var.org}-${var.region}"
-  name_vcn_dns   = "${local.prefixes.vcn}-${var.org}-${var.region}-dns"
+  name_vcn_dns   = "${local.prefixes.vcn}-${var.region}"
   name_snet_pub  = "${local.prefixes.snet_pub}-${var.org}-${var.region}"
   name_snet_priv = "${local.prefixes.snet_priv}-${var.org}-${var.region}"
 
