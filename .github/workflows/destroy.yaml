@@ -3,6 +3,13 @@ name: OKE Cluster Destroy Infrastructure
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: 'Target environment to destroy'
+        required: true
+        type: choice
+        options:
+          - oke-us-ashburn
+          - oke-us-chicago
       cluster_id:
         description: 'OKE Cluster OCID to destroy'
         required: true
@@ -52,13 +59,8 @@ jobs:
     name: "Verify Cluster Exists in OCI"
     needs: validate
     runs-on: ubuntu-latest
-    environment: ${{ matrix.environment }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - region: us-ashburn-1
-            environment: production-us-ashburn
+    environment: ${{ inputs.environment }}
+  
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -133,13 +135,7 @@ jobs:
     name: "Destroy ArgoCD Apps & Projects"
     needs: verify-cluster
     runs-on: ubuntu-latest
-    environment: ${{ matrix.environment }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - region: us-ashburn-1
-            environment: production-us-ashburn
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -201,16 +197,10 @@ jobs:
     name: "Destroy OCI Cluster"
     needs: argocd-destroy
     runs-on: ubuntu-latest
-    environment: ${{ matrix.environment }}
+    environment: ${{ inputs.environment }}
     env:
       TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - region: us-ashburn-1
-            environment: production-us-ashburn
-            tf_workspace: "oke-us-ashburn"
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -219,16 +209,16 @@ jobs:
         uses: hashicorp/setup-terraform@v3
 
       - name: Terraform Init
-        working-directory: ${{ matrix.tf_workspace }}
+        working-directory: ${{ inputs.environment }}
         run: terraform init
         
       - name: Terraform Plan Destroy
-        working-directory: ${{ matrix.tf_workspace }}
+        working-directory: ${{ inputs.environment }}
         run: terraform plan -destroy -no-color -input=false
         
 
       - name: Terraform Destroy
-        working-directory: ${{ matrix.tf_workspace }}
+        working-directory: ${{ inputs.environment }}
         run: terraform destroy -auto-approve -input=false
         
       - name: OCI Destroy Summary

@@ -58,7 +58,7 @@ jobs:
       matrix:
         include:
           - region: us-ashburn-1
-            environment: production-us-ashburn
+            environment: oke-us-ashburn
             tf_workspace: oke-us-ashburn
             working_dir: environments/us-ashburn
             module_path: modules/oke
@@ -180,7 +180,7 @@ jobs:
       matrix:
         include:
           - region: us-ashburn-1
-            environment: production-us-ashburn
+            environment: oke-us-ashburn
             tf_workspace: oke-us-ashburn
             working_dir: environments/us-ashburn
     steps:
