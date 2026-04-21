@@ -42,19 +42,6 @@ concurrency:
   group: oke-deploy-${{ github.ref }}
   cancel-in-progress: false
 
-x-oke-matrix-strategy: &oke-matrix-strategy
-  fail-fast: false
-  matrix:
-    include:
-      - region: us-ashburn-1
-        environment: production-us-ashburn
-        tf_workspace: oke-us-ashburn
-        working_dir: environments/us-ashburn
-
-x-terraform-common-env: &terraform-common-env
-  TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-  TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
-
 jobs:
   # ============================================================
   # Job 1: OCI Infrastructure (VCN, OKE, etc.)
@@ -62,9 +49,18 @@ jobs:
   oke-deploy:
     name: "OKE Provisioning - ${{ matrix.region }}"
     runs-on: ubuntu-latest
-    strategy: *oke-matrix-strategy
-
     environment: ${{ matrix.environment }}
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+      TF_PLUGIN_CACHE_DIR: ~/.terraform.d/plugin-cache
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: production-us-ashburn
+            tf_workspace: oke-us-ashburn
+            working_dir: environments/us-ashburn
     outputs:
       cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
       nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
@@ -119,6 +115,7 @@ jobs:
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
+        working-directory: ${{ matrix.working_dir }}
         run: |
           mkdir -p ~/.terraform.d/plugin-cache
           for attempt in 1 2 3; do
@@ -134,9 +131,7 @@ jobs:
 
             sleep $((attempt * 10))
           done
-        working-directory: ${{ matrix.working_dir }}
-        env: *terraform-common-env
-
+       
       - name: Generate CI Terraform Variables
         if: |
           steps.filter.outputs.run_plan == 'true' || 
@@ -159,27 +154,37 @@ jobs:
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
-        run: terraform plan -no-color -input=false
         working-directory: ${{ matrix.working_dir }}
-        env: *terraform-common-env
+        run: terraform plan -no-color -input=false
 
+      - name: Post plan to PR
+        if: github.event_name == 'pull_request' && steps.filter.outputs.run_plan == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const plan = require('fs').readFileSync('plan.txt', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Terraform Plan — \`${{ matrix.region }}\`\n\`\`\`\n${plan.slice(0, 65000)}\n\`\`\``
+            });
+        
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
-        run: terraform apply -auto-approve -input=false
         working-directory: ${{ matrix.working_dir }}
-        env: *terraform-common-env
-
+        run: terraform apply -auto-approve -input=false
+        
       - name: Export Cluster ID
         id: get_cluster_id
         if: steps.filter.outputs.run_apply == 'true'
+        working-directory: ${{ matrix.working_dir }}
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
           echo "cluster_id=$CLUSTER_ID" >> $GITHUB_OUTPUT
           echo "nlb_public_ip=$NLB_PUBLIC_IP" >> $GITHUB_OUTPUT
-        working-directory: ${{ matrix.working_dir }}
-        env: *terraform-common-env
-
+        
       - name: Save Terraform Plan (oke)
         if: always()
         uses: actions/upload-artifact@v4
