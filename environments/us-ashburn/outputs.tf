@@ -4,7 +4,7 @@ output "cluster_id" {
 }
 
 output "cluster_endpoint" {
-  description = "OKE cluster endpoint URL"
+  description = "OKE Cluster Endpoint URL"
   value       = module.oke.cluster_endpoint
 }
 
