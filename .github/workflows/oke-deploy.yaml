@@ -129,14 +129,14 @@ jobs:
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
-        run: terraform plan -no-color -input=false -out=tfplan
+        run: terraform plan -no-color -input=false
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
-        run: terraform apply -auto-approve -input=false tfplan
+        run: terraform apply -auto-approve -input=false
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
