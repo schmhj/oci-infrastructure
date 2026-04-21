@@ -77,6 +77,9 @@ jobs:
         run: |
           chmod +x ./.github/scripts/check_changes.sh
           ./.github/scripts/check_changes.sh ${{ matrix.working_dir }}
+          
+      - name: Set TFC workspace
+        run: echo "TF_WORKSPACE=${{ matrix.tf_workspace }}" >> $GITHUB_ENV
 
       - name: Setup Terraform
         if: |

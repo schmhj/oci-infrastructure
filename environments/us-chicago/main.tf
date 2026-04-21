@@ -1,6 +1,10 @@
 module "oke" {
   source = "../../modules/oke"
   
+  user_ocid = var.user_ocid
+  tenancy_ocid = var.tenancy_ocid
+  fingerprint = var.fingerprint
+  private_key = var.private_key
   org = var.org
   environment = var.environment
   compartment_id = var.compartment_id
