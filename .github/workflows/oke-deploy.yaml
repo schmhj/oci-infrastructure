@@ -84,6 +84,20 @@ jobs:
           steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
+      - name: Debug - Verify Module Path
+        if: |
+          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_apply == 'true'
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Working directory: ${{ matrix.working_dir }}"
+          echo "Module path check from ${{ matrix.working_dir }}:"
+          cd ${{ matrix.working_dir }}
+          echo "  pwd: $(pwd)"
+          echo "  ../../modules exists: $(test -d ../../modules && echo 'YES' || echo 'NO')"
+          echo "  ../../modules/oke exists: $(test -d ../../modules/oke && echo 'YES' || echo 'NO')"
+          ls -la ../../modules/oke/
+
       - name: Terraform Init
         if: |
           steps.filter.outputs.run_plan == 'true' || 
@@ -92,6 +106,7 @@ jobs:
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+          TF_WORKSPACE: ${{ matrix.tf_workspace }}
 
       - name: Terraform Plan
         if: |
@@ -101,6 +116,7 @@ jobs:
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+          TF_WORKSPACE: ${{ matrix.tf_workspace }}
           TF_VAR_compartment_id: ${{ secrets.OCI_COMPARTMENT_OCID }}
           TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
           TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
@@ -114,6 +130,7 @@ jobs:
         working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+          TF_WORKSPACE: ${{ matrix.tf_workspace }}
           TF_VAR_compartment_id: ${{ secrets.OCI_COMPARTMENT_OCID }}
           TF_VAR_tenancy_ocid: ${{ secrets.OCI_TENANCY_OCID }}
           TF_VAR_user_ocid: ${{ secrets.OCI_USER_OCID }}
