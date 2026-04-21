@@ -1,24 +1,27 @@
-name: OKE Cluster Deploy Infrastructure
+name: OKE Multi-Region Cluster Deployment
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - 'oci/**'
+      - 'environments/**'
+      - 'modules/**'
       - '.github/scripts/**'
       - '.github/argocd/**'
       - '.github/config.sh'
-      - '.github/workflows/cicd.yaml'
+      - '.github/workflows/oke-deploy.yaml'
   push:
     branches:
       - main
     paths:
-      - 'oci/**'
+      - 'environments/**'
+      - 'modules/**'
       - '.github/scripts/**'
       - '.github/argocd/**'
       - '.github/config.sh'
-      - '.github/workflows/cicd.yaml'
+      - '.github/workflows/oke-deploy.yaml'
+
   workflow_dispatch:
     inputs:
       action:
@@ -36,33 +39,44 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: oci-deploy-${{ github.ref }}
+  group: oke-deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   # ============================================================
   # Job 1: OCI Infrastructure (VCN, OKE, etc.)
   # ============================================================
-  oci:
-    name: "OCI Provisioning"
+  oke-deploy:
+    name: "OKE Provisioning - ${{ matrix.region }}"
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false  
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: production-us-ashburn
+            tf_workspace: oke-us-ashburn
+            working_dir: environments/us-ashburn
+
+    environment: ${{ matrix.environment }}
     outputs:
       cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
       nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
-      - name: Check for changes in oci
+      - name: Check for changes in oke
         id: filter
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           WORKFLOW_INPUT_ACTION: ${{ github.event.inputs.action }}
         run: |
           chmod +x ./.github/scripts/check_changes.sh
-          ./.github/scripts/check_changes.sh oci
+          ./.github/scripts/check_changes.sh ${{ matrix.working_dir }}
 
       - name: Setup Terraform
         if: |
@@ -70,31 +84,63 @@ jobs:
           steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
+      - name: Debug - Verify Module Path
+        if: |
+          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_apply == 'true'
+        run: |
+          echo "Current directory: $(pwd)"
+          echo "Working directory: ${{ matrix.working_dir }}"
+          echo "Module path check from ${{ matrix.working_dir }}:"
+          cd ${{ matrix.working_dir }}
+          echo "  pwd: $(pwd)"
+          echo "  ../../modules exists: $(test -d ../../modules && echo 'YES' || echo 'NO')"
+          echo "  ../../modules/oke exists: $(test -d ../../modules/oke && echo 'YES' || echo 'NO')"
+          ls -la ../../modules/oke/
+
       - name: Terraform Init
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
         run: terraform init
-        working-directory: oci
+        working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
+      - name: Generate CI Terraform Variables
+        if: |
+          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_apply == 'true'
+        working-directory: ${{ matrix.working_dir }}
+        run: |
+          cat > ci.auto.tfvars <<EOF
+          compartment_id = "${{ secrets.OCI_COMPARTMENT_OCID }}"
+          tenancy_ocid = "${{ secrets.OCI_TENANCY_OCID }}"
+          user_ocid = "${{ secrets.OCI_USER_OCID }}"
+          fingerprint = "${{ secrets.OCI_FINGERPRINT }}"
+          private_key = <<EOT
+          ${{ secrets.OCI_PRIVATE_KEY }}
+          EOT
+          region = "${{ vars.OCI_REGION }}"
+          environment = "${{ matrix.environment }}"
+          EOF
+          
       - name: Terraform Plan
         if: |
           steps.filter.outputs.run_plan == 'true' || 
           steps.filter.outputs.run_apply == 'true'
         run: terraform plan -no-color -input=false
-        working-directory: oci
+        working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
         run: terraform apply -auto-approve -input=false
-        working-directory: oci
+        working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
-      
+
       - name: Export Cluster ID
         id: get_cluster_id
         if: steps.filter.outputs.run_apply == 'true'
@@ -103,11 +149,11 @@ jobs:
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
           echo "cluster_id=$CLUSTER_ID" >> $GITHUB_OUTPUT
           echo "nlb_public_ip=$NLB_PUBLIC_IP" >> $GITHUB_OUTPUT
-        working-directory: oci
+        working-directory: ${{ matrix.working_dir }}
         env:
           TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
 
-      - name: Save Terraform Plan (OCI)
+      - name: Save Terraform Plan (oke)
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -129,18 +175,18 @@ jobs:
   # ============================================================
   argocd:
     name: "Deploy ArgoCD & Bootstrap project"
-    needs: oci
+    needs: oke-deploy
     runs-on: ubuntu-latest
     if: | 
       always() && 
-      needs.oci.result == 'success' &&
-      needs.oci.outputs.cluster_id != '' &&
-      needs.oci.outputs.nlb_public_ip != ''
+      needs.oke-deploy.result == 'success' &&
+      needs.oke-deploy.outputs.cluster_id != '' &&
+      needs.oke-deploy.outputs.nlb_public_ip != ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Check for changes in .github
         id: filter
@@ -180,7 +226,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          CLUSTER_ID: ${{ needs.oci.outputs.cluster_id }}
+          CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
           chmod +x ./.github/scripts/kubeconfig.sh
@@ -218,7 +264,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          NLB_PUBLIC_IP: ${{ needs.oci.outputs.nlb_public_ip }}
+          NLB_PUBLIC_IP: ${{ needs.oke-deploy.outputs.nlb_public_ip }}
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         id: update_argocd_password
         run: |
@@ -244,7 +290,7 @@ jobs:
           echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Access ArgoCD at: \`https://${{ needs.oci.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
+          echo "Access ArgoCD at: \`https://${{ needs.oke-deploy.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
       
       - name: Checkout cluster-config repo
         uses: actions/checkout@v4
