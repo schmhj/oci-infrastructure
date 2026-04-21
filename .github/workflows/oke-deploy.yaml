@@ -10,7 +10,7 @@ on:
       - '.github/scripts/**'
       - '.github/argocd/**'
       - '.github/config.sh'
-      - '.github/workflows/cicd.yaml'
+      - '.github/workflows/oke-deploy.yaml'
   push:
     branches:
       - main
@@ -20,7 +20,7 @@ on:
       - '.github/scripts/**'
       - '.github/argocd/**'
       - '.github/config.sh'
-      - '.github/workflows/cicd.yaml'
+      - '.github/workflows/oke-deploy.yaml'
 
   workflow_dispatch:
     inputs:
@@ -54,7 +54,7 @@ jobs:
       matrix:
         include:
           - region: us-ashburn-1
-            env: production
+            env: production-us-ashburn
             tf_workspace: oke-us-ashburn
             working_dir: environments/us-ashburn
 
