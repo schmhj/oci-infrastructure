@@ -31,12 +31,15 @@ locals {
   pods_cidr     = "10.244.0.0/16"
   services_cidr = "10.96.0.0/16"
 
-  # VCN CIDR
-  vcn_cidr = "10.0.0.0/16"
+  # VCN CIDR - compute subnet CIDRs from VCN CIDR
+  # Extract VCN prefix (first two octets) to align subnets with VCN
+  # Example: VCN 10.1.0.0/16 → subnets 10.1.0.0/24 and 10.1.1.0/24
+  vcn_cidr_parts      = split(".", var.vcn_cidr)
+  vcn_prefix          = "${local.vcn_cidr_parts[0]}.${local.vcn_cidr_parts[1]}"
 
-  # Subnet CIDRs
-  public_subnet_cidr  = "10.0.0.0/24"
-  private_subnet_cidr = "10.0.1.0/24"
+  # Subnet CIDRs derived from VCN CIDR
+  public_subnet_cidr  = "${local.vcn_prefix}.0.0/24"
+  private_subnet_cidr = "${local.vcn_prefix}.1.0/24"
 
   # Latest OKE compatible image
   latest_oke_image_id = [

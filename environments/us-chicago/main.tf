@@ -19,4 +19,5 @@ module "oke" {
   node_memory_in_gb = var.node_memory_in_gb
   node_port = var.node_port
   tags = var.tags
+  nlb_allowed_cidr_blocks = var.nlb_allowed_cidr_blocks
 }

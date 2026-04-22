@@ -89,6 +89,68 @@ variable "node_port" {
   default     = 30443
 }
 
+# Network security variables
+variable "nlb_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed for NLB ingress (TCP 443, 6443). REQUIRED - secure by default."
+  type        = list(string)
+  validation {
+    condition     = length(var.nlb_allowed_cidr_blocks) > 0
+    error_message = "nlb_allowed_cidr_blocks must contain at least one CIDR block. Use [\"0.0.0.0/0\"] to allow all traffic (not recommended for production)."
+  }
+}
+
+variable "enable_strict_egress" {
+  description = "Enable strict egress filtering (only allowed destinations instead of 0.0.0.0/0)"
+  type        = bool
+  default     = false
+}
+
+variable "allowed_egress_cidrs" {
+  description = "CIDR blocks allowed for egress when enable_strict_egress is true"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
+# Multi-region networking variables
+variable "enable_drg" {
+  description = "Enable Dynamic Routing Gateway for inter-region peering"
+  type        = bool
+  default     = false
+}
+
+variable "drg_id" {
+  description = "DRG ID for inter-region connectivity (required if enable_drg = true)"
+  type        = string
+  default     = null
+}
+
+variable "peer_region_pods_cidr" {
+  description = "Pod CIDR of peer region for DRG routing (e.g., '10.2.244.0/22' for Chicago pods when in Ashburn)"
+  type        = string
+  default     = null
+}
+
+# Custom routing variables
+variable "internet_gateway_route_rules" {
+  description = "Custom routes for internet gateway route table (for DRG, hybrid, or custom routing)"
+  type = list(object({
+    destination       = string
+    destination_type  = string
+    network_entity_id = string
+  }))
+  default = []
+}
+
+variable "nat_gateway_route_rules" {
+  description = "Custom routes for NAT gateway route table (for DRG, hybrid, or custom routing)"
+  type = list(object({
+    destination       = string
+    destination_type  = string
+    network_entity_id = string
+  }))
+  default = []
+}
+
 variable "tags" {
   description = "A map of tags to apply to the resources."
   type        = map(string)

@@ -89,3 +89,12 @@ variable "private_key" {
   type      = string
   sensitive = true
 }
+
+variable "nlb_allowed_cidr_blocks" {
+  description = "CIDR blocks allowed for NLB ingress (TCP 443, 6443). REQUIRED - secure by default."
+  type        = list(string)
+  validation {
+    condition     = length(var.nlb_allowed_cidr_blocks) > 0
+    error_message = "nlb_allowed_cidr_blocks must contain at least one CIDR block. Use [\"0.0.0.0/0\"] to allow all traffic (not recommended for production)."
+  }
+}
