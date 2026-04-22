@@ -233,7 +233,6 @@ jobs:
           CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id[matrix.region] }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
-          echo "outputs: ${needs.oke-deploy.output}"
           ./.github/scripts/kubeconfig.sh
 
       - name: Setup TLS Secret
