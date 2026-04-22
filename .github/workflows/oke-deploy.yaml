@@ -66,8 +66,10 @@ jobs:
             working_dir: environments/us-chicago
             module_path: modules/oke
     outputs:
-      cluster_id: ${{ steps.get_cluster_id.outputs.cluster_id }}
-      nlb_public_ip: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}
+      cluster_id_us-ashburn-1:  ${{ steps.get_cluster_id.outputs.cluster_id_us-ashburn-1 }}
+      nlb_public_ip_us-ashburn-1: ${{ steps.get_cluster_id.outputs.nlb_public_ip_us-ashburn-1 }}
+      cluster_id_us-chicago-1:  ${{ steps.get_cluster_id.outputs.cluster_id_us-chicago-1 }}
+      nlb_public_ip_us-chicago-1: ${{ steps.get_cluster_id.outputs.nlb_public_ip_us-chicago-1 }}
 
     steps:
       - name: Checkout
@@ -154,16 +156,18 @@ jobs:
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
-          echo "cluster_id=$CLUSTER_ID" >> $GITHUB_OUTPUT
-          echo "nlb_public_ip=$NLB_PUBLIC_IP" >> $GITHUB_OUTPUT
+          REGION="${{ matrix.region }}"
+
+          echo "cluster_id_${REGION}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
+          echo "nlb_public_ip_${REGION}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
         
       - name: Job Summary
         if: always()
         run: |
           echo "## OCI Provisioning Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Cluster ID**: ${{ steps.get_cluster_id.outputs.cluster_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **NLB IP**: ${{ steps.get_cluster_id.outputs.nlb_public_ip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ steps.get_cluster_id.outputs[format('cluster_id_{0}', matrix.region)] }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **NLB IP**: ${{ steps.get_cluster_id.outputs[format('nlb_public_ip_{0}', matrix.region)] }}" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================
   # Job 2: OCI and Kubernetes Configuration
@@ -175,8 +179,8 @@ jobs:
     if: | 
       always() && 
       needs.oke-deploy.result == 'success' &&
-      needs.oke-deploy.outputs.cluster_id != '' &&
-      needs.oke-deploy.outputs.nlb_public_ip != ''
+      (needs.oke-deploy.outputs.cluster_id_us-ashburn-1 != '' ||
+      needs.oke-deploy.outputs.cluster_id_us-chicago-1  != '')
     environment: ${{ matrix.environment }}
     strategy:
       fail-fast: false
@@ -185,9 +189,13 @@ jobs:
           - region: us-ashburn-1
             environment: oke-us-ashburn
             working_dir: environments/us-ashburn
+            cluster_id_key: cluster_id_us-ashburn-1
+            nlb_public_ip_key: nlb_public_ip_us-ashburn-1
           - region: us-chicago-1
             environment: oke-us-chicago
             working_dir: environments/us-chicago
+            cluster_id_key: cluster_id_us-chicago-1
+            nlb_public_ip_key: nlb_public_ip_us-chicago-1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -230,7 +238,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id[matrix.region] }}
+          CLUSTER_ID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.cluster_id_key] }}
           REGION: ${{ vars.OCI_REGION }}
         run: |
           ./.github/scripts/kubeconfig.sh
@@ -264,7 +272,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          NLB_PUBLIC_IP: ${{ needs.oke-deploy.outputs.nlb_public_ip }}
+          NLB_PUBLIC_IP: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
         id: update_argocd_password
         run: |
@@ -288,7 +296,7 @@ jobs:
           echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Access ArgoCD at: \`https://${{ needs.oke-deploy.outputs.nlb_public_ip }}:30443\`" >> $GITHUB_STEP_SUMMARY
+          echo "Access ArgoCD at: \`https://${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}:30443\`" >> $GITHUB_STEP_SUMMARY
       
       - name: Checkout cluster-config repo
         uses: actions/checkout@v4
