@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -e  # exit on any error
-
 PROFILE=$1
 
 if [ -z "$PROFILE" ]; then

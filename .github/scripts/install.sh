@@ -23,8 +23,8 @@ else
     --create-namespace \
     --set "server.service.type=NodePort" \
     --set "server.service.nodePortHttps=${ARGOCD_NODE_PORT_HTTPS}" \
-    --set 'configs.cm."kustomize\.buildOptions"="--enable-helm"' \
-    --set 'configs.cm."application\.sync\.impersonation\.enabled"="true"' \
+    --set "configs.cm.kustomize\.buildOptions=--enable-helm" \
+    --set "configs.cm.application\.sync\.impersonation\.enabled=true" \
     || fail "Failed to install ArgoCD"
 
   success "ArgoCD installed successfully"
