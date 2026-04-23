@@ -296,7 +296,7 @@ jobs:
           echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Access ArgoCD at: \`https://${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}:30443\`" >> $GITHUB_STEP_SUMMARY
+          echo "Access ArgoCD at: \`https://${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}:30179\`" >> $GITHUB_STEP_SUMMARY
       
       - name: Checkout cluster-config repo
         uses: actions/checkout@v4
