@@ -27,7 +27,7 @@ resource "oci_network_load_balancer_backend_set" "nlb_backend_set" {
 # Backend pool members (worker nodes)
 # Each active node becomes a backend server
 resource "oci_network_load_balancer_backend" "nlb_backend" {
-  count = var.node_count
+  count = length(data.oci_containerengine_node_pool.oke_np.nodes)
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = var.node_port

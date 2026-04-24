@@ -23,14 +23,14 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
   || fail "Failed to retrieve initial ArgoCD password"
 
 # Setup port forwarding in background for argocd CLI access
-# success "Setting up port forwarding to ArgoCD server..."
-# kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server 30443:443 \
-#   >/dev/null 2>&1 &
-# PORT_FORWARD_PID=$!
-# trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
+success "Setting up port forwarding to ArgoCD server..."
+kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server 30443:443 \
+  >/dev/null 2>&1 &
+PORT_FORWARD_PID=$!
+trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
 
 # Wait for port forward to be ready
-# sleep 2
+sleep 2
 
 # Check if password was already updated (try new password first)
 success "Checking if admin password needs updating..."
