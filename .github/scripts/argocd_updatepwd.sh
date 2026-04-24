@@ -24,7 +24,7 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
 
 # Setup port forwarding in background for argocd CLI access
 success "Setting up port forwarding to ArgoCD server..."
-kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server 30443:443 \
+kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server ${ARGOCD_NODE_PORT_HTTPS}:443 \
   >/dev/null 2>&1 &
 PORT_FORWARD_PID=$!
 trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
