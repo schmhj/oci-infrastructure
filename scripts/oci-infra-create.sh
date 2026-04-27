@@ -13,7 +13,7 @@ if [ "$PROFILE"=="ashburn" ]; then
   export OCI_CLI_PROFILE=ASHBURN
 
   oci ce cluster create-kubeconfig \
-  --cluster-id ocid1.cluster.oc1.iad.aaaaaaaatoaqv5vcy4x53rhxgifl53eo6retdyfvpedtxqs4iczhnctwucwa \
+  --cluster-id ocid1.cluster.oc1.iad.aaaaaaaacjhwnmzwsjh2iha2cnrpgbbv72x4h3xs3ijnw2h33c2dxiqesnea \
   --file ~/.kube/us-ashburn-config \
   --region us-ashburn-1 \
   --token-version 2.0.0 \
@@ -24,7 +24,7 @@ elif [ "$PROFILE"=="chicago" ]; then
   export OCI_CLI_PROFILE=CHICAGO
 
   oci ce cluster create-kubeconfig \
-  --cluster-id ocid1.cluster.oc1.us-chicago-1.aaaaaaaaj4hya6sy5jj66qtxr7hec4i4upivqladggorcv25kctkdy7iu6sa \
+  --cluster-id ocid1.cluster.oc1.us-chicago-1.aaaaaaaa7rdhrnlg64wb7qnm67fjymg2nuvnreed4vrbsmvxdc2kam2n3y3a \
   --file ~/.kube/us-chicago-config \
   --region us-chicago-1 \
   --token-version 2.0.0 \
@@ -36,12 +36,6 @@ else
   echo "Error: Unknown profile '$PROFILE'. Expected 'ashburn' or 'chicago'."
   exit 1
 fi
-
-
-
-
-
-
 
 # Get initial password
 kubectl -n argocd get secret argocd-initial-admin-secret \
