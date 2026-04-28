@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+# set -euo pipefail
 
 # Source shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,6 +21,7 @@ else
     --version "$ARGOCD_HELM_VERSION" \
     --namespace "$ARGOCD_HELM_NAMESPACE" \
     --create-namespace \
+    --set "server.extraArgs={--insecure}" \
     --set "server.service.type=NodePort" \
     --set "server.service.nodePortHttps=${ARGOCD_NODE_PORT_HTTPS}" \
     --set "configs.cm.kustomize\.buildOptions=--enable-helm" \
