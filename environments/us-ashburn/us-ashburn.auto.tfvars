@@ -4,7 +4,7 @@ cluster_name = "oke-prod-ashburn"
 vcn_cidr = "10.1.0.0/16"
 
 availability_domain = "mMVr:US-ASHBURN-1-AD-1"
-kubernetes_version = "v1.34.2"
+kubernetes_version = "v1.36"
 node_count = 2
 node_memory_in_gb = 16
 node_ocpus = 2
