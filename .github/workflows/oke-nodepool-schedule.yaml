@@ -1,0 +1,158 @@
+name: OKE Node Pool Schedule
+
+on:
+  schedule:
+    # Run hourly so each region can evaluate its own local time zone.
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Choose auto to follow the 10 PM stop / 8 AM start schedule'
+        required: true
+        default: auto
+        type: choice
+        options:
+          - auto
+          - start
+          - stop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oke-nodepool-schedule-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  scale-node-pool:
+    name: "Scale node pool - ${{ matrix.region }}"
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    env:
+      TF_TOKEN_app_terraform_io: ${{ secrets.TF_CLOUD_TOKEN }}
+      OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
+      OCI_USER: ${{ secrets.OCI_USER_OCID }}
+      OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+      OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
+      OCI_REGION: ${{ matrix.region }}
+      DEFAULT_REGION: ${{ matrix.region }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - region: us-ashburn-1
+            environment: oke-us-ashburn
+            working_dir: environments/us-ashburn
+            timezone: America/New_York
+            normal_size: 2
+          - region: us-chicago-1
+            environment: oke-us-chicago
+            working_dir: environments/us-chicago
+            timezone: America/Chicago
+            normal_size: 2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine scale action
+        id: action
+        env:
+          REQUESTED_ACTION: ${{ github.event.inputs.action }}
+          TIME_ZONE: ${{ matrix.timezone }}
+        run: |
+          set -euo pipefail
+
+          action="${REQUESTED_ACTION:-auto}"
+          local_time="$(TZ="$TIME_ZONE" date +%H:%M)"
+
+          if [[ "$action" == "auto" ]]; then
+            local_hour="${local_time%%:*}"
+            if [[ "$local_hour" == "22" ]]; then
+              action="stop"
+            elif [[ "$local_hour" == "08" ]]; then
+              action="start"
+            else
+              action="skip"
+            fi
+          fi
+
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+          echo "local_time=$local_time" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Terraform
+        if: steps.action.outputs.action != 'skip'
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Install OCI CLI
+        if: steps.action.outputs.action != 'skip'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y python3-pip
+          pip3 install --upgrade oci-cli
+
+      - name: Setup OCI credentials
+        if: steps.action.outputs.action != 'skip'
+        run: |
+          ./.github/scripts/setup_oci_credentials.sh
+
+      - name: Terraform Init
+        if: steps.action.outputs.action != 'skip'
+        working-directory: ${{ matrix.working_dir }}
+        run: terraform init -input=false
+
+      - name: Read node pool ID
+        if: steps.action.outputs.action != 'skip'
+        id: node_pool
+        working-directory: ${{ matrix.working_dir }}
+        run: |
+          set -euo pipefail
+
+          NODE_POOL_ID="$(terraform output -raw node_pool_id)"
+          if [[ -z "$NODE_POOL_ID" ]]; then
+            echo "Failed to resolve node_pool_id from Terraform output" >&2
+            exit 1
+          fi
+
+          echo "node_pool_id=$NODE_POOL_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Scale node pool
+        if: steps.action.outputs.action != 'skip'
+        working-directory: ${{ matrix.working_dir }}
+        env:
+          ACTION: ${{ steps.action.outputs.action }}
+          NODE_POOL_ID: ${{ steps.node_pool.outputs.node_pool_id }}
+          TARGET_SIZE: ${{ matrix.normal_size }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$ACTION" == "stop" ]]; then
+            TARGET_SIZE=0
+          elif [[ "$ACTION" == "start" ]]; then
+            TARGET_SIZE="$TARGET_SIZE"
+          else
+            echo "Unsupported action: $ACTION" >&2
+            exit 1
+          fi
+
+          echo "Updating node pool $NODE_POOL_ID in $OCI_REGION to size $TARGET_SIZE"
+          oci ce node-pool update \
+            --node-pool-id "$NODE_POOL_ID" \
+            --size "$TARGET_SIZE" \
+            --region "$OCI_REGION"
+
+      - name: Job Summary
+        if: always()
+        env:
+          REQUESTED_ACTION: ${{ github.event.inputs.action }}
+        run: |
+          {
+            echo "## Node Pool Schedule Summary"
+            echo "- **Region**: ${{ matrix.region }}"
+            echo "- **Timezone**: ${{ matrix.timezone }}"
+            echo "- **Local time**: ${{ steps.action.outputs.local_time }}"
+            echo "- **Requested action**: ${REQUESTED_ACTION:-auto}"
+            echo "- **Resolved action**: ${{ steps.action.outputs.action }}"
+            if [[ "${{ steps.action.outputs.action }}" != "skip" ]]; then
+              echo "- **Node pool ID**: ${{ steps.node_pool.outputs.node_pool_id }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
