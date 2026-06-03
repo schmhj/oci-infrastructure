@@ -3,7 +3,7 @@ name: OKE Node Pool Schedule
 on:
   schedule:
     # Run hourly so each region can evaluate its own local time zone.
-    - cron: '0 * * * *'
+    - cron: '0/15 * * * *'
   workflow_dispatch:
     inputs:
       action:
@@ -63,18 +63,23 @@ jobs:
           set -euo pipefail
 
           action="${REQUESTED_ACTION:-auto}"
+          utc_time="$(date -u +%H:%M)"
           local_time="$(TZ="$TIME_ZONE" date +%H:%M)"
+          local_hour="${local_time%%:*}"
 
           if [[ "$action" == "auto" ]]; then
-            local_hour="${local_time%%:*}"
-            if [[ "$local_hour" == "22" ]]; then
+            if (( 10#$local_hour >= 22 )); then
               action="stop"
-            elif [[ "$local_hour" == "08" ]]; then
+            elif (( 10#$local_hour >= 8 && 10#$local_hour < 9 )); then
               action="start"
             else
               action="skip"
             fi
           fi
+
+          echo "UTC time: $utc_time"
+          echo "Local time ($TIME_ZONE): $local_time"
+          echo "Resolved action: $action"
 
           echo "action=$action" >> "$GITHUB_OUTPUT"
           echo "local_time=$local_time" >> "$GITHUB_OUTPUT"
