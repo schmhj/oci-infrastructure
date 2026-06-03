@@ -24,13 +24,21 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
 
 # Setup port forwarding in background for argocd CLI access
 success "Setting up port forwarding to ArgoCD server..."
+PF_LOG=$(mktemp)
 kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server ${ARGOCD_NODE_PORT_HTTPS}:443 \
-  --address 127.0.0.1 >/dev/null 2>&1 &
+  --address 127.0.0.1 >"$PF_LOG" 2>&1 &
 PORT_FORWARD_PID=$!
-trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
+trap "kill $PORT_FORWARD_PID 2>/dev/null || true; rm -f $PF_LOG 2>/dev/null || true" EXIT
 
 # Wait for port forward to be ready
 sleep 2
+if ! kill -0 "$PORT_FORWARD_PID" 2>/dev/null; then
+  echo "❌ kubectl port-forward failed to start or died immediately. Log output:"
+  cat "$PF_LOG"
+  rm -f "$PF_LOG"
+  fail "Port forwarding setup failed"
+fi
+rm -f "$PF_LOG"
 
 # Check if password was already updated (try new password first)
 success "Checking if admin password needs updating..."
