@@ -25,7 +25,7 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
 # Setup port forwarding in background for argocd CLI access
 success "Setting up port forwarding to ArgoCD server..."
 kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server ${ARGOCD_NODE_PORT_HTTPS}:443 \
-  >/dev/null 2>&1 &
+  --address 127.0.0.1 >/dev/null 2>&1 &
 PORT_FORWARD_PID=$!
 trap "kill $PORT_FORWARD_PID 2>/dev/null || true" EXIT
 
@@ -37,16 +37,16 @@ success "Checking if admin password needs updating..."
 if argocd login --insecure \
   --username admin \
   --password "$ARGOCD_ADMIN_PASSWORD" \
-  --grpc-web "localhost:${ARGOCD_NODE_PORT_HTTPS}" \
+  --grpc-web "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
   >/dev/null 2>&1; then
   success "ArgoCD admin password already configured"
 else
   # Login with initial password and update
-  success "Logging in to ArgoCD..."
+  success "Logging in with initial password to ArgoCD..."
   argocd login --insecure \
     --username admin \
     --password "$ARGOCD_INITIAL_PASS" \
-    --grpc-web "localhost:${ARGOCD_NODE_PORT_HTTPS}" \
+    --grpc-web "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
     || fail "Failed to login to ArgoCD"
 
   # Update password

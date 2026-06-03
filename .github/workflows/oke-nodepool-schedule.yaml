@@ -2,8 +2,8 @@ name: OKE Node Pool Schedule
 
 on:
   schedule:
-    # Run hourly so each region can evaluate its own local time zone.
-    - cron: '0/15 * * * *'
+    # Run every 15 minutes to evaluate local time.
+    - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       action:
