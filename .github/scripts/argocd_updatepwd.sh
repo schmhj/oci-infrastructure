@@ -22,53 +22,58 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
   | base64 -d) \
   || fail "Failed to retrieve initial ArgoCD password"
 
-# Setup port forwarding in background for argocd CLI access
-success "Setting up port forwarding to ArgoCD server..."
-PF_LOG=$(mktemp)
-LOGIN_CHECK_LOG=$(mktemp)
-kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server ${ARGOCD_NODE_PORT_HTTPS}:443 \
-  --address 127.0.0.1 >"$PF_LOG" 2>&1 &
-PORT_FORWARD_PID=$!
-trap 'kill $PORT_FORWARD_PID 2>/dev/null || true; rm -f "$PF_LOG" "$LOGIN_CHECK_LOG" 2>/dev/null || true' EXIT
-
-# Wait for port forward to be ready
-sleep 2
-if ! kill -0 "$PORT_FORWARD_PID" 2>/dev/null; then
-  echo "❌ kubectl port-forward failed to start or died immediately. Log output:"
-  cat "$PF_LOG"
-  fail "Port forwarding setup failed"
-fi
-
 # Check if password was already updated (try new password first)
 success "Checking if admin password needs updating..."
-if argocd login "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
-  --insecure \
-  --username admin \
-  --password "$ARGOCD_ADMIN_PASSWORD" \
-  --grpc-web \
-  >"$LOGIN_CHECK_LOG" 2>&1; then
-  success "ArgoCD admin password already configured"
-else
-  # Check if the failure was due to connection error rather than authentication
-  if grep -qE "connection refused|dial tcp|context deadline exceeded|no such host" "$LOGIN_CHECK_LOG"; then
-    echo "❌ Network error during ArgoCD login check:"
-    cat "$LOGIN_CHECK_LOG"
-    echo "=== Port Forward Log ==="
-    cat "$PF_LOG"
-    echo "========================"
-    fail "ArgoCD server is unreachable"
-  fi
+LOGIN_CHECK_LOG=$(mktemp)
+trap 'rm -f "$LOGIN_CHECK_LOG" 2>/dev/null || true' EXIT
 
+MAX_RETRIES=10
+RETRY_DELAY=5
+REACHABLE=false
+ALREADY_CONFIGURED=false
+
+for i in $(seq 1 "$MAX_RETRIES"); do
+  if argocd login "${NLB_PUBLIC_IP}" \
+    --insecure \
+    --username admin \
+    --password "$ARGOCD_ADMIN_PASSWORD" \
+    --grpc-web \
+    >"$LOGIN_CHECK_LOG" 2>&1; then
+    success "ArgoCD admin password already configured"
+    REACHABLE=true
+    ALREADY_CONFIGURED=true
+    break
+  else
+    # Check if the failure was due to connection error rather than authentication
+    if grep -qE "connection refused|dial tcp|context deadline exceeded|no such host" "$LOGIN_CHECK_LOG"; then
+      echo "  Attempt $i/$MAX_RETRIES - ArgoCD server not reachable at ${NLB_PUBLIC_IP}. Retrying in ${RETRY_DELAY}s..."
+      sleep "$RETRY_DELAY"
+    else
+      # Server is reachable, but authentication failed (expected if password needs update)
+      REACHABLE=true
+      ALREADY_CONFIGURED=false
+      break
+    fi
+  fi
+done
+
+if [ "$REACHABLE" = "false" ]; then
+  echo "❌ Network error during ArgoCD login check:"
+  cat "$LOGIN_CHECK_LOG"
+  fail "ArgoCD server at ${NLB_PUBLIC_IP} remained unreachable after $((MAX_RETRIES * RETRY_DELAY)) seconds"
+fi
+
+if [ "$ALREADY_CONFIGURED" = "false" ]; then
   # Login with initial password and update
   success "Logging in with initial password to ArgoCD..."
-  argocd login "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
+  argocd login "${NLB_PUBLIC_IP}" \
     --insecure \
     --username admin \
     --password "$ARGOCD_INITIAL_PASS" \
     --grpc-web \
     || {
-      echo "❌ Login failed. Port-forward logs:"
-      cat "$PF_LOG"
+      echo "❌ Login failed. Initial login logs:"
+      cat "$LOGIN_CHECK_LOG"
       fail "Failed to login to ArgoCD"
     }
 
@@ -93,4 +98,4 @@ kubectl patch configmap/argocd-cm \
   -p="[{\"op\": \"replace\", \"path\": \"/data/url\", \"value\":\"${ARGOCD_URL}\"}]" \
   || warn "Failed to patch ArgoCD URL (may already be set)"
 
-success "ArgoCD configured at: $ARGOCD_URL:${ARGOCD_NODE_PORT_HTTPS}"
+success "ArgoCD configured at: $ARGOCD_URL"
