@@ -25,37 +25,52 @@ ARGOCD_INITIAL_PASS=$(kubectl get secret argocd-initial-admin-secret \
 # Setup port forwarding in background for argocd CLI access
 success "Setting up port forwarding to ArgoCD server..."
 PF_LOG=$(mktemp)
+LOGIN_CHECK_LOG=$(mktemp)
 kubectl port-forward -n "$ARGOCD_HELM_NAMESPACE" svc/argocd-server ${ARGOCD_NODE_PORT_HTTPS}:443 \
   --address 127.0.0.1 >"$PF_LOG" 2>&1 &
 PORT_FORWARD_PID=$!
-trap "kill $PORT_FORWARD_PID 2>/dev/null || true; rm -f $PF_LOG 2>/dev/null || true" EXIT
+trap 'kill $PORT_FORWARD_PID 2>/dev/null || true; rm -f "$PF_LOG" "$LOGIN_CHECK_LOG" 2>/dev/null || true' EXIT
 
 # Wait for port forward to be ready
 sleep 2
 if ! kill -0 "$PORT_FORWARD_PID" 2>/dev/null; then
   echo "❌ kubectl port-forward failed to start or died immediately. Log output:"
   cat "$PF_LOG"
-  rm -f "$PF_LOG"
   fail "Port forwarding setup failed"
 fi
-rm -f "$PF_LOG"
 
 # Check if password was already updated (try new password first)
 success "Checking if admin password needs updating..."
-if argocd login --insecure \
+if argocd login "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
+  --insecure \
   --username admin \
   --password "$ARGOCD_ADMIN_PASSWORD" \
-  --grpc-web "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
-  >/dev/null 2>&1; then
+  --grpc-web \
+  >"$LOGIN_CHECK_LOG" 2>&1; then
   success "ArgoCD admin password already configured"
 else
+  # Check if the failure was due to connection error rather than authentication
+  if grep -qE "connection refused|dial tcp|context deadline exceeded|no such host" "$LOGIN_CHECK_LOG"; then
+    echo "❌ Network error during ArgoCD login check:"
+    cat "$LOGIN_CHECK_LOG"
+    echo "=== Port Forward Log ==="
+    cat "$PF_LOG"
+    echo "========================"
+    fail "ArgoCD server is unreachable"
+  fi
+
   # Login with initial password and update
   success "Logging in with initial password to ArgoCD..."
-  argocd login --insecure \
+  argocd login "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
+    --insecure \
     --username admin \
     --password "$ARGOCD_INITIAL_PASS" \
-    --grpc-web "127.0.0.1:${ARGOCD_NODE_PORT_HTTPS}" \
-    || fail "Failed to login to ArgoCD"
+    --grpc-web \
+    || {
+      echo "❌ Login failed. Port-forward logs:"
+      cat "$PF_LOG"
+      fail "Failed to login to ArgoCD"
+    }
 
   # Update password
   success "Updating admin password..."
