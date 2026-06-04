@@ -329,10 +329,10 @@ jobs:
           token: ${{ secrets.GH_PAT_SECRET_ADMIN }}
           
       - name: Apply AppProjects App
-        run: kubectl apply -f bootstrap/prod/appprojects-app.yaml
+        run: kubectl apply -f bootstrap/prod/${{ matrix.region }}/appprojects-app.yaml
 
       - name: Apply Root App
-        run: kubectl apply -f bootstrap/prod/root-app.yaml
+        run: kubectl apply -f bootstrap/prod/${{ matrix.region }}/root-app.yaml
 
       - name: Bootstrap Summary
         if: success()
