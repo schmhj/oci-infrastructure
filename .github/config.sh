@@ -5,7 +5,7 @@
 # ============================================================
 # ArgoCD Helm Chart Configuration
 # ============================================================
-export ARGOCD_HELM_VERSION="7.8.26"
+export ARGOCD_HELM_VERSION="9.5.18"
 export ARGOCD_HELM_REPO="https://argoproj.github.io/argo-helm"
 export ARGOCD_HELM_CHART="argo/argo-cd"
 export ARGOCD_HELM_NAMESPACE="argocd"

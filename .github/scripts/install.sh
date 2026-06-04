@@ -9,26 +9,21 @@ source "$SCRIPT_DIR/config.sh"
 require_cmd "helm"
 require_cmd "kubectl"
 
-# Check if ArgoCD is already installed
-if helm list -n "$ARGOCD_HELM_NAMESPACE" 2>/dev/null | grep -q "^argocd"; then
-  success "ArgoCD v${ARGOCD_HELM_VERSION} is already installed"
-else
-  success "Installing ArgoCD v${ARGOCD_HELM_VERSION}..."
-  helm repo add argo "$ARGOCD_HELM_REPO" || warn "ArgoCD helm repo may already exist"
-  helm repo update || fail "Failed to update helm repos"
+success "Installing/upgrading ArgoCD to v${ARGOCD_HELM_VERSION}..."
+helm repo add argo "$ARGOCD_HELM_REPO" || warn "ArgoCD helm repo may already exist"
+helm repo update || fail "Failed to update helm repos"
 
-  helm upgrade --install argocd "$ARGOCD_HELM_CHART" \
-    --version "$ARGOCD_HELM_VERSION" \
-    --namespace "$ARGOCD_HELM_NAMESPACE" \
-    --create-namespace \
-    --set "server.service.type=NodePort" \
-    --set "server.service.nodePortHttps=${ARGOCD_NODE_PORT_HTTPS}" \
-    --set "configs.cm.kustomize\.buildOptions=--enable-helm" \
-    --set "configs.cm.application\.sync\.impersonation\.enabled=true" \
-    || fail "Failed to install ArgoCD"
+helm upgrade --install argocd "$ARGOCD_HELM_CHART" \
+  --version "$ARGOCD_HELM_VERSION" \
+  --namespace "$ARGOCD_HELM_NAMESPACE" \
+  --create-namespace \
+  --set "server.service.type=NodePort" \
+  --set "server.service.nodePortHttps=${ARGOCD_NODE_PORT_HTTPS}" \
+  --set "configs.cm.kustomize\.buildOptions=--enable-helm" \
+  --set "configs.cm.application\.sync\.impersonation\.enabled=true" \
+  || fail "Failed to install/upgrade ArgoCD"
 
-  success "ArgoCD installed successfully"
-fi
+success "ArgoCD installed/upgraded to v${ARGOCD_HELM_VERSION}"
 
 # Check if kubeseal is already installed
 if command -v kubeseal &> /dev/null; then
