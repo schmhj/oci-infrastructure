@@ -15,6 +15,7 @@
 #   4. Delete leftover ArgoCD namespace
 #   5. Clean up cluster-scoped RBAC
 #   6. Remove CRDs
+#   7. Clean up workload namespaces (cert-manager, infrastructure, workloads, monitoring)
 #
 # Assumes kubeconfig is already configured.
 # ============================================================
@@ -38,6 +39,13 @@ ARGOCD_CRDS=(
 
 SEALED_SECRETS_CRDS=(
   "sealedsecrets.bitnami.com"
+)
+
+WORKLOAD_NAMESPACES=(
+  "cert-manager"
+  "infrastructure"
+  "workloads"
+  "monitoring"
 )
 
 # ── Helpers ───────────────────────────────────────────────────
@@ -234,6 +242,27 @@ for crd in "${SEALED_SECRETS_CRDS[@]}"; do
   fi
 done
 
+# ── Step 7: Clean up workload namespaces ─────────────────────
+log "Cleaning up workload namespaces..."
+for ns in "${WORKLOAD_NAMESPACES[@]}"; do
+  if ! namespace_exists "$ns"; then
+    log "  Namespace '$ns' not found — skipping."
+    continue
+  fi
+
+  log "  Removing resources from namespace '$ns'..."
+  kubectl delete \
+    all,configmap,secret,serviceaccount,role,rolebinding,networkpolicy,ingress,pvc,hpa,pdb,job,cronjob \
+    --all \
+    -n "$ns" \
+    --timeout="$RESOURCE_DELETE_TIMEOUT" 2>/dev/null || true
+
+  log "  Deleting namespace '$ns'..."
+  kubectl delete namespace "$ns" \
+    --timeout="$NAMESPACE_DELETE_TIMEOUT" 2>/dev/null || true
+  wait_for_namespace_deleted "$ns"
+done
+
 # ── Final verification ────────────────────────────────────────
 log "Running final verification..."
 ISSUES=0
@@ -242,6 +271,13 @@ if namespace_exists "$ARGOCD_NAMESPACE"; then
   log "⚠️  Namespace '$ARGOCD_NAMESPACE' still exists — may need manual cleanup."
   ISSUES=$((ISSUES + 1))
 fi
+
+for ns in "${WORKLOAD_NAMESPACES[@]}"; do
+  if namespace_exists "$ns"; then
+    log "⚠️  Namespace '$ns' still exists — may need manual cleanup."
+    ISSUES=$((ISSUES + 1))
+  fi
+done
 
 for crd in "${ARGOCD_CRDS[@]}" "${SEALED_SECRETS_CRDS[@]}"; do
   if crd_exists "$crd"; then

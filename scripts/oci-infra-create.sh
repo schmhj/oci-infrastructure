@@ -13,7 +13,7 @@ if [ "$PROFILE"=="ashburn" ]; then
   export OCI_CLI_PROFILE=ASHBURN
 
   oci ce cluster create-kubeconfig \
-  --cluster-id ocid1.cluster.oc1.iad.aaaaaaaacjhwnmzwsjh2iha2cnrpgbbv72x4h3xs3ijnw2h33c2dxiqesnea \
+  --cluster-id ocid1.cluster.oc1.iad.aaaaaaaatc4n55v6u5emvos463nplxbxuvydjmhwq5zhdr3s6cyiidjzfvqq \
   --file ~/.kube/us-ashburn-config \
   --region us-ashburn-1 \
   --token-version 2.0.0 \
@@ -24,7 +24,7 @@ elif [ "$PROFILE"=="chicago" ]; then
   export OCI_CLI_PROFILE=CHICAGO
 
   oci ce cluster create-kubeconfig \
-  --cluster-id ocid1.cluster.oc1.us-chicago-1.aaaaaaaa7rdhrnlg64wb7qnm67fjymg2nuvnreed4vrbsmvxdc2kam2n3y3a \
+  --cluster-id ocid1.cluster.oc1.us-chicago-1.aaaaaaaag33pwebqpewyon77fic4sm3ycrbkmubzhrbotfdvhcu5r5ewbclq \
   --file ~/.kube/us-chicago-config \
   --region us-chicago-1 \
   --token-version 2.0.0 \
