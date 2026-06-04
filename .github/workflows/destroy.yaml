@@ -173,6 +173,16 @@ jobs:
         run: |
           ./.github/scripts/kubeconfig.sh
 
+      - name: Delete ArgoCD Server Service (free node port 30443)
+        run: |
+          if kubectl get svc argocd-server -n argocd &>/dev/null; then
+            echo "Deleting argocd-server service to release node port 30443..."
+            kubectl delete svc argocd-server -n argocd --wait=true --timeout=60s
+            echo "✅ argocd-server deleted. Node port 30443 released."
+          else
+            echo "argocd-server service not found — node port already free."
+          fi
+
       - name: Delete ArgoCD Root App
         env:
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
