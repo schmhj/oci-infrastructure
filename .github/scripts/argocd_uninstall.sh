@@ -46,6 +46,7 @@ WORKLOAD_NAMESPACES=(
   "infrastructure"
   "workloads"
   "monitoring"
+  "traefik"
 )
 
 # ── Helpers ───────────────────────────────────────────────────

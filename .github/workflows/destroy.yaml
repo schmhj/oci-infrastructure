@@ -19,8 +19,8 @@ on:
         required: true
         type: choice
         options:
+          - apps
           - oke
-          - argocd
           - all
       action:
         description: 'Type DESTROY to confirm destruction'
@@ -144,7 +144,7 @@ jobs:
     needs: verify-oke-cluster
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
-    if: ${{ inputs.object == 'argocd' || inputs.object == 'all' || inputs.object == 'oke' }}
+    if: ${{ inputs.object == 'apps' || inputs.object == 'all' || inputs.object == 'oke' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
