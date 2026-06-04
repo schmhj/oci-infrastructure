@@ -267,10 +267,27 @@ jobs:
         run: |
           ./.github/scripts/argocd_start.sh
 
-      - name: Update ArgoCD Initial Admin Password
+      - name: Check if ArgoCD is already configured
+        id: check_configured
         if: |
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
+        run: |
+          set -euo pipefail
+          SVC_TYPE=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.spec.type}' 2>/dev/null || echo "None")
+          if [[ "$SVC_TYPE" == "ClusterIP" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "ArgoCD is already configured (service is ClusterIP)"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "ArgoCD is not yet configured (service is $SVC_TYPE)"
+          fi
+
+      - name: Update ArgoCD Initial Admin Password
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          steps.check_configured.outputs.configured == 'false'
         env:
           NLB_PUBLIC_IP: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}
           ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
