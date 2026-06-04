@@ -208,6 +208,7 @@ jobs:
           echo "- **Root App**: deleted" >> $GITHUB_STEP_SUMMARY
           echo "- **AppProjects**: deleted" >> $GITHUB_STEP_SUMMARY
           echo "- **ArgoCD / Sealed Secrets**: uninstalled" >> $GITHUB_STEP_SUMMARY
+          echo "- **Infrastructure, and Workload Apps**: uninstalled" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================
   # Job 2: Destroy OCI infrastructure via Terraform
