@@ -1,13 +1,13 @@
 # OCI Network Configuration Guide
 
-This document describes the network architecture, CIDR allocation, security policies, and multi-region connectivity for the OCI Kubernetes infrastructure.
+This document describes the network architecture, CIDR allocation, security policies, and cross-tenant connectivity for the OCI Kubernetes infrastructure.
 
 ## Table of Contents
 
 1. [Architecture Overview](#architecture-overview)
 2. [CIDR Allocation Strategy](#cidr-allocation-strategy)
 3. [Security Configuration](#security-configuration)
-4. [Multi-Region Connectivity (DRG)](#multi-region-connectivity-drg)
+4. [Cross-Tenant Connectivity (DRG)](#cross-tenant-connectivity-drg)
 5. [Network Security Lists](#network-security-lists)
 6. [Routing Configuration](#routing-configuration)
 7. [NLB Configuration](#nlb-configuration)
@@ -17,9 +17,9 @@ This document describes the network architecture, CIDR allocation, security poli
 
 ## Architecture Overview
 
-The OCI infrastructure is deployed across two regions (us-ashburn-1 and us-chicago-1) with isolated VCNs and Kubernetes clusters. Each region has:
+The OCI infrastructure is deployed in OCI region `us-ashburn-1` with two isolated tenant clusters (`tenant-a` and `tenant-b`). Each tenant has:
 
-- **VCN** (Virtual Cloud Network): Isolated network per region
+- **VCN** (Virtual Cloud Network): Isolated network per tenant
 - **Public Subnet**: Hosts the Network Load Balancer (NLB), routes to Internet Gateway
 - **Private Subnet**: Hosts OKE worker nodes, routes to NAT Gateway for egress
 - **OKE Cluster**: Kubernetes cluster with dynamic subnet CIDR allocation
@@ -53,18 +53,18 @@ The OCI infrastructure is deployed across two regions (us-ashburn-1 and us-chica
               │      │  (10.244.0.0/16)     │
               │      └─ NAT Gateway         │
               └─────────────────────────────┘
-                   │           │
-              (Multi-Region)   │
-                   │           │
-              ┌────────────────────────┐
-              │  DRG (Optional)        │
-              │  (Inter-Region Routes) │
-              └────────────────────────┘
-                   │
-         ┌─────────┴─────────┐
-         │                   │
-    [Ashburn]           [Chicago]
-   10.1.0.0/16          10.2.0.0/16
+                    │           │
+               (Cross-Tenant)   │
+                    │           │
+               ┌────────────────────────┐
+               │  DRG (Optional)        │
+               │  (Inter-Tenant Routes) │
+               └────────────────────────┘
+                    │
+          ┌─────────┴─────────┐
+          │                   │
+     [tenant-a]           [tenant-b]
+    10.1.0.0/16          10.2.0.0/16
 ```
 
 ---
@@ -73,33 +73,33 @@ The OCI infrastructure is deployed across two regions (us-ashburn-1 and us-chica
 
 ### VCN CIDR Blocks
 
-Each region has a unique VCN CIDR block:
+Each tenant has a unique VCN CIDR block:
 
-| Region | VCN CIDR | Public Subnet | Private Subnet |
+| Tenant | VCN CIDR | Public Subnet | Private Subnet |
 |--------|----------|---------------|----------------|
-| Ashburn | 10.1.0.0/16 | 10.1.0.0/24 | 10.1.1.0/24 |
-| Chicago | 10.2.0.0/16 | 10.2.0.0/24 | 10.2.1.0/24 |
+| tenant-a | 10.1.0.0/16 | 10.1.0.0/24 | 10.1.1.0/24 |
+| tenant-b | 10.2.0.0/16 | 10.2.0.0/24 | 10.2.1.0/24 |
 
-**Key Feature**: Subnet CIDRs are **automatically derived** from the VCN CIDR. If you change the VCN CIDR in `us-ashburn.auto.tfvars`, the subnets will automatically align:
+**Key Feature**: Subnet CIDRs are **automatically derived** from the VCN CIDR. If you change the VCN CIDR in `tenant-a.auto.tfvars`, the subnets will automatically align:
 
 ```hcl
-# us-ashburn.auto.tfvars
+# tenant-a.auto.tfvars
 vcn_cidr = "10.1.0.0/16"  # → Subnets: 10.1.0.0/24, 10.1.1.0/24
 
-# us-chicago.auto.tfvars
+# tenant-b.auto.tfvars
 vcn_cidr = "10.2.0.0/16"  # → Subnets: 10.2.0.0/24, 10.2.1.0/24
 ```
 
 ### Kubernetes Network CIDRs
 
-These are fixed across all regions for consistency:
+These are fixed across all tenants for consistency:
 
-| Component | CIDR | Across Regions |
+| Component | CIDR | Across Tenants |
 |-----------|------|---|
-| Pod CIDR | 10.244.0.0/16 | Same in all regions |
-| Service CIDR | 10.96.0.0/16 | Same in all regions |
+| Pod CIDR | 10.244.0.0/16 | Same in all tenants |
+| Service CIDR | 10.96.0.0/16 | Same in all tenants |
 
-**Important**: Pod CIDRs are the same in both regions. For multi-region pod communication, use DRG peering (see [Multi-Region Connectivity](#multi-region-connectivity-drg)).
+**Important**: Pod CIDRs are the same in both tenants. For cross-tenant pod communication, use DRG peering (see [Cross-Tenant Connectivity](#cross-tenant-connectivity-drg)).
 
 ### CIDR Overlap Check
 
@@ -157,7 +157,7 @@ Security is enforced at two levels:
 #### Default Configuration (Open)
 
 ```hcl
-# us-ashburn.auto.tfvars
+# tenant-a.auto.tfvars
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]  # Allow all traffic
 ```
 
@@ -166,7 +166,7 @@ nlb_allowed_cidr_blocks = ["0.0.0.0/0"]  # Allow all traffic
 To restrict NLB and API access to specific networks:
 
 ```hcl
-# us-ashburn.auto.tfvars
+# tenant-a.auto.tfvars
 nlb_allowed_cidr_blocks = [
   "203.0.113.0/24",   # Office network
   "198.51.100.0/24",  # VPN network
@@ -188,7 +188,7 @@ Then gradually restrict by replacing with specific CIDR blocks.
 By default, all outbound traffic is allowed. To restrict egress:
 
 ```hcl
-# us-ashburn.auto.tfvars
+# tenant-a.auto.tfvars
 enable_strict_egress = true
 allowed_egress_cidrs = [
   "0.0.0.0/0",              # Allow all (default)
@@ -201,20 +201,20 @@ allowed_egress_cidrs = [
 
 ---
 
-## Multi-Region Connectivity (DRG)
+## Cross-Tenant Connectivity (DRG)
 
 ### Overview
 
 Dynamic Routing Gateway (DRG) enables:
-- Pod-to-pod communication between Ashburn and Chicago clusters
-- Service discovery across regions
-- Multi-region failover patterns
+- Pod-to-pod communication between tenant-a and tenant-b clusters
+- Service discovery across tenants
+- Multi-tenant failover patterns
 
 ### Architecture
 
 ```
 ┌────────────────────┐          ┌────────────────────┐
-│  Ashburn Cluster   │          │  Chicago Cluster   │
+│  tenant-a Cluster  │          │  tenant-b Cluster  │
 │  VCN: 10.1.0.0/16  │          │  VCN: 10.2.0.0/16  │
 │  Pods: 10.244.0/16 │          │  Pods: 10.244.0/16 │
 └─────────┬──────────┘          └──────────┬─────────┘
@@ -239,7 +239,7 @@ Create a DRG in your tenancy (outside of this module):
 # Example: In your root module
 resource "oci_core_drg" "shared_drg" {
   compartment_id = var.compartment_id
-  display_name   = "multi-region-drg"
+  display_name   = "multi-tenant-drg"
 }
 
 output "drg_id" {
@@ -251,43 +251,43 @@ Then retrieve the DRG ID from outputs or OCI console.
 
 #### Step 2: Enable DRG in Terraform
 
-Update both region environment files:
+Update both tenant environment files:
 
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 enable_drg               = true
 drg_id                   = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr    = "10.2.244.0/22"  # Chicago pods
+peer_tenant_pods_cidr    = "10.2.244.0/22"  # tenant-b pods
 
-# environments/us-chicago/us-chicago.auto.tfvars
+# environments/tenant-b/tenant-b.auto.tfvars
 enable_drg               = true
 drg_id                   = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr    = "10.1.244.0/22"  # Ashburn pods
+peer_tenant_pods_cidr    = "10.1.244.0/22"  # tenant-a pods
 ```
 
-#### Step 3: Create Kubectl Secret for Cross-Region Communication
+#### Step 3: Create Kubectl Secret for Cross-Tenant Communication
 
 ```bash
 # Export both clusters' endpoints
-export ASHBURN_ENDPOINT="<ashburn-api-endpoint>"
-export CHICAGO_ENDPOINT="<chicago-api-endpoint>"
+export TENANT_A_ENDPOINT="<tenant-a-api-endpoint>"
+export TENANT_B_ENDPOINT="<tenant-b-api-endpoint>"
 
-# Create secret in Ashburn cluster
-kubectl --context ashburn create secret generic chicago-endpoint \
-  --from-literal=endpoint=$CHICAGO_ENDPOINT
+# Create secret in tenant-a cluster
+kubectl --context tenant-a create secret generic tenant-b-endpoint \
+  --from-literal=endpoint=$TENANT_B_ENDPOINT
 
-# Create secret in Chicago cluster
-kubectl --context chicago create secret generic ashburn-endpoint \
-  --from-literal=endpoint=$ASHBURN_ENDPOINT
+# Create secret in tenant-b cluster
+kubectl --context tenant-b create secret generic tenant-a-endpoint \
+  --from-literal=endpoint=$TENANT_A_ENDPOINT
 ```
 
 #### Step 4: Verify Connectivity
 
 ```bash
-# Deploy a test pod in Ashburn
-kubectl --context ashburn run -it test-ashburn --image=busybox -- sh
+# Deploy a test pod in tenant-a
+kubectl --context tenant-a run -it test-tenant-a --image=busybox -- sh
 
-# From within the pod, ping a service in Chicago
+# From within the pod, ping a service in tenant-b
 # (requires DNS resolution setup - see deployment examples)
 ```
 
@@ -296,17 +296,17 @@ kubectl --context ashburn run -it test-ashburn --image=busybox -- sh
 When `enable_drg = true`, the module creates:
 
 1. **DRG Attachment**: Connects VCN to shared DRG
-2. **Custom Route Rules** (via `internet_gateway_route_rules`): Routes peer region pods to DRG
-   - Ashburn: Route `10.2.244.0/22` (Chicago pods) → DRG
-   - Chicago: Route `10.1.244.0/22` (Ashburn pods) → DRG
+2. **Custom Route Rules** (via `internet_gateway_route_rules`): Routes peer tenant pods to DRG
+   - tenant-a: Route `10.2.244.0/22` (tenant-b pods) → DRG
+   - tenant-b: Route `10.1.244.0/22` (tenant-a pods) → DRG
 
 To add DRG routes, update your environment tfvars:
 
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 enable_drg              = true
 drg_id                  = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr   = "10.2.244.0/22"  # Chicago pods CIDR
+peer_tenant_pods_cidr   = "10.2.244.0/22"  # tenant-b pods CIDR
 
 internet_gateway_route_rules = [
   {
@@ -317,7 +317,7 @@ internet_gateway_route_rules = [
 ]
 ```
 
-**Note**: You must also create matching DRG route table attachments on the DRG side (not in this module) to complete the route path. The DRG needs to be configured to route traffic back to both regions.
+**Note**: You must also create matching DRG route table attachments on the DRG side (not in this module) to complete the route path. The DRG needs to be configured to route traffic back to both tenants.
 
 ---
 
@@ -367,10 +367,10 @@ ingress_security_rules {
 Add custom routes for DRG or on-premises connectivity:
 
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 internet_gateway_route_rules = [
   {
-    destination       = "10.2.0.0/16"  # Chicago VCN
+    destination       = "10.2.0.0/16"  # tenant-b VCN
     destination_type  = "CIDR_BLOCK"
     network_entity_id = "ocid1.drg.oc1.iad..."  # DRG ID
   }
@@ -451,76 +451,76 @@ This would require certificate provisioning automation (separate from this modul
 
 ## Deployment Examples
 
-### Single Region Deployment (Ashburn Only)
+### Single Tenant Deployment (tenant-a Only)
 
 ```bash
 cd modules/oke
-terraform apply -var-file=../../environments/us-ashburn/us-ashburn.auto.tfvars
+terraform apply -var-file=../../environments/tenant-a/tenant-a.auto.tfvars
 ```
 
 **Configuration** (minimal):
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]  # Allow all (for demo)
-enable_drg              = false           # No multi-region
+enable_drg              = false           # No cross-tenant
 ```
 
-### Multi-Region Deployment (Both Regions, No DRG)
+### Multi-Tenant Deployment (Both Tenants, No DRG)
 
 ```bash
-# Ashburn
+# tenant-a
 cd modules/oke
-terraform apply -var-file=../../environments/us-ashburn/us-ashburn.auto.tfvars
+terraform apply -var-file=../../environments/tenant-a/tenant-a.auto.tfvars
 
-# Chicago
-terraform apply -var-file=../../environments/us-chicago/us-chicago.auto.tfvars
+# tenant-b
+terraform apply -var-file=../../environments/tenant-b/tenant-b.auto.tfvars
 ```
 
 **Configuration**:
 ```hcl
-# Both regions
+# Both tenants
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 enable_drg              = false
 ```
 
-**Result**: Two isolated clusters, no network communication between regions.
+**Result**: Two isolated clusters, no network communication between tenants.
 
-### Multi-Region Deployment with DRG (Cross-Region Pods)
+### Multi-Tenant Deployment with DRG (Cross-Tenant Pods)
 
 #### Step 1: Create Shared DRG
 
 ```bash
 oci core drg create --compartment-id <COMPARTMENT_ID> \
-  --display-name multi-region-drg
+  --display-name multi-tenant-drg
 # Output: drg_id = "ocid1.drg.oc1.iad..."
 ```
 
 #### Step 2: Configure Terraform
 
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 nlb_allowed_cidr_blocks = ["203.0.113.0/24"]  # Your office CIDR
 enable_drg              = true
 drg_id                  = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr   = "10.2.244.0/22"
+peer_tenant_pods_cidr   = "10.2.244.0/22"
 
 internet_gateway_route_rules = [
   {
-    destination       = "10.2.244.0/22"  # Chicago pods CIDR
+    destination       = "10.2.244.0/22"  # tenant-b pods CIDR
     destination_type  = "CIDR_BLOCK"
     network_entity_id = "ocid1.drg.oc1.iad..."
   }
 ]
 
-# environments/us-chicago/us-chicago.auto.tfvars
+# environments/tenant-b/tenant-b.auto.tfvars
 nlb_allowed_cidr_blocks = ["203.0.113.0/24"]  # Your office CIDR
 enable_drg              = true
 drg_id                  = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr   = "10.1.244.0/22"
+peer_tenant_pods_cidr   = "10.1.244.0/22"
 
 internet_gateway_route_rules = [
   {
-    destination       = "10.1.244.0/22"  # Ashburn pods CIDR
+    destination       = "10.1.244.0/22"  # tenant-a pods CIDR
     destination_type  = "CIDR_BLOCK"
     network_entity_id = "ocid1.drg.oc1.iad..."
   }
@@ -532,11 +532,11 @@ internet_gateway_route_rules = [
 ```bash
 cd modules/oke
 
-# Ashburn
-terraform apply -var-file=../../environments/us-ashburn/us-ashburn.auto.tfvars
+# tenant-a
+terraform apply -var-file=../../environments/tenant-a/tenant-a.auto.tfvars
 
-# Chicago
-terraform apply -var-file=../../environments/us-chicago/us-chicago.auto.tfvars
+# tenant-b
+terraform apply -var-file=../../environments/tenant-b/tenant-b.auto.tfvars
 ```
 
 #### Step 4: Verify Routing
@@ -546,17 +546,17 @@ terraform apply -var-file=../../environments/us-chicago/us-chicago.auto.tfvars
 oci core drg-attachment list --drg-id <DRG_ID>
 
 # Check route tables
-oci core route-table list --vcn-id <ASHBURN_VCN_ID>
-oci core route-table list --vcn-id <CHICAGO_VCN_ID>
+oci core route-table list --vcn-id <TENANT_A_VCN_ID>
+oci core route-table list --vcn-id <TENANT_B_VCN_ID>
 
 # Test pod connectivity
-kubectl exec -it <ashburn-pod> -- ping <chicago-pod-ip>
+kubectl exec -it <tenant-a-pod> -- ping <tenant-b-pod-ip>
 ```
 
 ### Restricted NLB Access (Production)
 
 ```hcl
-# environments/us-ashburn/us-ashburn.auto.tfvars
+# environments/tenant-a/tenant-a.auto.tfvars
 nlb_allowed_cidr_blocks = [
   "203.0.113.0/24",    # Office network
   "198.51.100.0/24",   # VPN network
@@ -564,11 +564,11 @@ nlb_allowed_cidr_blocks = [
 ]
 enable_drg              = true
 drg_id                  = "ocid1.drg.oc1.iad..."
-peer_region_pods_cidr   = "10.2.244.0/22"
+peer_tenant_pods_cidr   = "10.2.244.0/22"
 
 internet_gateway_route_rules = [
   {
-    destination       = "10.2.244.0/22"  # Chicago pods CIDR
+    destination       = "10.2.244.0/22"  # tenant-b pods CIDR
     destination_type  = "CIDR_BLOCK"
     network_entity_id = "ocid1.drg.oc1.iad..."
   }
@@ -577,7 +577,7 @@ internet_gateway_route_rules = [
 
 **Result**:
 - NLB accessible only from office, VPN, or within VCN
-- DRG enabled for cross-region pod communication
+- DRG enabled for cross-tenant pod communication
 - Internet access blocked (except via NAT for pod egress)
 
 ---
@@ -629,10 +629,10 @@ oci core security-list get --security-list-id <SL_ID>
 # Check if route exists
 oci core route-table get --route-table-id <ROUTE_TABLE_ID>
 
-# Verify peer region pods CIDR
-kubectl --context chicago get pods -o wide | grep <POD_NAME>
+# Verify peer tenant pods CIDR
+kubectl --context tenant-b get pods -o wide | grep <POD_NAME>
 
-# Update peer_region_pods_cidr in tfvars if needed
+# Update peer_tenant_pods_cidr in tfvars if needed
 ```
 
 ### NLB Public IP Not Accessible

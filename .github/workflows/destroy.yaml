@@ -8,8 +8,8 @@ on:
         required: true
         type: choice
         options:
-          - oke-us-ashburn
-          - oke-us-chicago
+          - oke-tenant-a
+          - oke-tenant-b
       cluster_id:
         description: 'OKE Cluster OCID to destroy'
         required: true
@@ -225,10 +225,10 @@ jobs:
       - name: Determine working directory based on environment
         id: select-workdir
         run: |
-          if [[ "${{ inputs.environment }}" == "oke-us-ashburn" ]]; then
-            echo "WORK_DIR=environments/us-ashburn" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ inputs.environment }}" == "oke-us-chicago" ]]; then
-            echo "WORK_DIR=environments/us-chicago" >> "$GITHUB_OUTPUT"
+          if [[ "${{ inputs.environment }}" == "oke-tenant-a" ]]; then
+            echo "WORK_DIR=environments/tenant-a" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ inputs.environment }}" == "oke-tenant-b" ]]; then
+            echo "WORK_DIR=environments/tenant-b" >> "$GITHUB_OUTPUT"
           else
             echo "❌ Unknown environment: ${{ inputs.environment }}"
             exit 1
