@@ -144,7 +144,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
-        run: terraform plan -no-color -input=false
+        run: terraform plan -no-color -input=false -reconfigure
 
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
