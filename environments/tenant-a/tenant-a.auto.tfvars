@@ -1,6 +1,6 @@
 org = "schmhj"
 region = "us-ashburn-1"
-cluster_name = "oke-prod-ashburn"
+cluster_name = "oke-prod-tenant-a"
 vcn_cidr = "10.1.0.0/16"
 
 availability_domain = "mMVr:US-ASHBURN-1-AD-1"
@@ -15,14 +15,15 @@ node_port = 30443
 # For production, replace with specific office/VPN CIDR blocks
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 
-# Multi-region DRG configuration (optional)
-# Uncomment and set these to enable cross-region pod communication
+# Cross-tenant pod communication (optional, via DRG)
+# Uncomment and set these to enable cross-tenant pod communication
 # enable_drg = true
 # drg_id = "ocid1.drg.oc1.iad..."  # Shared DRG ID
-# peer_region_pods_cidr = "10.2.244.0/22"  # Chicago pods CIDR
+# peer_tenant_pods_cidr = "10.2.244.0/22"  # tenant-b pods CIDR
 
 tags = {
   "environment" = "production"
   region = "us-ashburn-1"
+  tenant = "tenant-a"
   managed_by = "terraform"
 }

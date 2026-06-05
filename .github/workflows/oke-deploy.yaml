@@ -1,4 +1,4 @@
-name: OKE Multi-Region Cluster Deployment
+name: OKE Multi-Tenant Cluster Deployment
 
 on:
   pull_request:
@@ -47,7 +47,7 @@ jobs:
   # Job 1: OCI Infrastructure (VCN, OKE, etc.)
   # ============================================================
   oke-deploy:
-    name: "OKE Provisioning - ${{ matrix.region }}"
+    name: "OKE Provisioning - ${{ matrix.env }}"
     runs-on: ubuntu-latest
     environment: ${{ matrix.environment }}
     env:
@@ -57,19 +57,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - region: us-ashburn-1
-            environment: oke-us-ashburn
-            working_dir: environments/us-ashburn
+          - env: tenant-a
+            region: us-ashburn-1
+            environment: oke-tenant-a
+            working_dir: environments/tenant-a
             module_path: modules/oke
-          - region: us-chicago-1
-            environment: oke-us-chicago
-            working_dir: environments/us-chicago
+          - env: tenant-b
+            region: us-ashburn-1
+            environment: oke-tenant-b
+            working_dir: environments/tenant-b
             module_path: modules/oke
     outputs:
-      cluster_id_us-ashburn-1:  ${{ steps.get_cluster_id.outputs.cluster_id_us-ashburn-1 }}
-      nlb_public_ip_us-ashburn-1: ${{ steps.get_cluster_id.outputs.nlb_public_ip_us-ashburn-1 }}
-      cluster_id_us-chicago-1:  ${{ steps.get_cluster_id.outputs.cluster_id_us-chicago-1 }}
-      nlb_public_ip_us-chicago-1: ${{ steps.get_cluster_id.outputs.nlb_public_ip_us-chicago-1 }}
+      cluster_id_tenant-a:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-a }}
+      nlb_public_ip_tenant-a: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-a }}
+      cluster_id_tenant-b:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-b }}
+      nlb_public_ip_tenant-b: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-b }}
 
     steps:
       - name: Checkout
@@ -87,13 +89,13 @@ jobs:
 
       - name: Setup Terraform
         if: |
-          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         uses: hashicorp/setup-terraform@v3
 
       - name: Cache Terraform Plugins
         if: |
-          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         uses: actions/cache@v4
         with:
@@ -104,7 +106,7 @@ jobs:
 
       - name: Debug - Verify Module Path
         if: |
-          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         run: |
           echo "Current directory: $(pwd)"
@@ -118,7 +120,7 @@ jobs:
 
       - name: Terraform Init
         if: |
-          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
         run: |
@@ -136,19 +138,19 @@ jobs:
 
             sleep $((attempt * 10))
           done
-           
+
       - name: Terraform Plan
         if: |
-          steps.filter.outputs.run_plan == 'true' || 
+          steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
         run: terraform plan -no-color -input=false
-        
+
       - name: Terraform Apply
         if: steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
         run: terraform apply -auto-approve -input=false
-        
+
       - name: Export Cluster ID
         id: get_cluster_id
         if: steps.filter.outputs.run_apply == 'true'
@@ -156,46 +158,49 @@ jobs:
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
-          REGION="${{ matrix.region }}"
+          ENV="${{ matrix.env }}"
 
-          echo "cluster_id_${REGION}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
-          echo "nlb_public_ip_${REGION}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
-        
+          echo "cluster_id_${ENV}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
+          echo "nlb_public_ip_${ENV}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
+
       - name: Job Summary
         if: always()
         run: |
           echo "## OCI Provisioning Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Env**: ${{ matrix.env }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Region**: ${{ matrix.region }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Cluster ID**: ${{ steps.get_cluster_id.outputs[format('cluster_id_{0}', matrix.region)] }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **NLB IP**: ${{ steps.get_cluster_id.outputs[format('nlb_public_ip_{0}', matrix.region)] }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cluster ID**: ${{ steps.get_cluster_id.outputs[format('cluster_id_{0}', matrix.env)] }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **NLB IP**: ${{ steps.get_cluster_id.outputs[format('nlb_public_ip_{0}', matrix.env)] }}" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================
   # Job 2: OCI and Kubernetes Configuration
   # ============================================================
   argocd-deploy:
-    name: "Deploy ArgoCD & Bootstrap project"
+    name: "Deploy ArgoCD & Bootstrap - ${{ matrix.env }}"
     needs: oke-deploy
     runs-on: ubuntu-latest
-    if: | 
-      always() && 
+    if: |
+      always() &&
       needs.oke-deploy.result == 'success' &&
-      (needs.oke-deploy.outputs.cluster_id_us-ashburn-1 != '' ||
-      needs.oke-deploy.outputs.cluster_id_us-chicago-1  != '')
+      (needs.oke-deploy.outputs.cluster_id_tenant-a != '' ||
+      needs.oke-deploy.outputs.cluster_id_tenant-b  != '')
     environment: ${{ matrix.environment }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - region: us-ashburn-1
-            environment: oke-us-ashburn
-            working_dir: environments/us-ashburn
-            cluster_id_key: cluster_id_us-ashburn-1
-            nlb_public_ip_key: nlb_public_ip_us-ashburn-1
-          - region: us-chicago-1
-            environment: oke-us-chicago
-            working_dir: environments/us-chicago
-            cluster_id_key: cluster_id_us-chicago-1
-            nlb_public_ip_key: nlb_public_ip_us-chicago-1
+          - env: tenant-a
+            region: us-ashburn-1
+            environment: oke-tenant-a
+            working_dir: environments/tenant-a
+            cluster_id_key: cluster_id_tenant-a
+            nlb_public_ip_key: nlb_public_ip_tenant-a
+          - env: tenant-b
+            region: us-ashburn-1
+            environment: oke-tenant-b
+            working_dir: environments/tenant-b
+            cluster_id_key: cluster_id_tenant-b
+            nlb_public_ip_key: nlb_public_ip_tenant-b
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -217,6 +222,7 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y python3-pip
+          pip3 --version || true
           pip3 install --upgrade oci-cli
 
       - name: Setup OCI credentials
@@ -308,7 +314,7 @@ jobs:
           steps.filter.outputs.run_apply == 'true'
         run: |
           ./.github/scripts/argocd_patch.sh
-      
+
       - name: K8s Setup Summary
         if: |
           success() &&
@@ -320,19 +326,19 @@ jobs:
           echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
           echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-      
+
       - name: Checkout cluster-config repo
         uses: actions/checkout@v4
         with:
           repository: schmhj/cluster-config
           ref: main
           token: ${{ secrets.GH_PAT_SECRET_ADMIN }}
-          
+
       - name: Apply AppProjects App
-        run: kubectl apply -f bootstrap/prod/${{ matrix.region }}/appprojects-app.yaml
+        run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/appprojects-app.yaml
 
       - name: Apply Root App
-        run: kubectl apply -f bootstrap/prod/${{ matrix.region }}/root-app.yaml
+        run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/root-app.yaml
 
       - name: Bootstrap Summary
         if: success()
@@ -340,8 +346,8 @@ jobs:
           echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅  AppProjects app deployed" >> $GITHUB_STEP_SUMMARY
-          echo "✅  Root app deployed" >> $GITHUB_STEP_SUMMARY  
-      
+          echo "✅  Root app deployed" >> $GITHUB_STEP_SUMMARY
+
       - name: Clean up
         if: always()
         run: |

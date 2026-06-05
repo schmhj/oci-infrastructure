@@ -1,6 +1,6 @@
 # OCI Kubernetes Infrastructure (OKE)
 
-A production-ready, multi-region Terraform infrastructure for deploying Oracle Kubernetes Engine (OKE) clusters with ArgoCD, Kubeseal, and GitOps automation.
+A production-ready, multi-tenant Terraform infrastructure for deploying Oracle Kubernetes Engine (OKE) clusters with ArgoCD, Kubeseal, and GitOps automation.
 
 ---
 
@@ -27,8 +27,8 @@ A production-ready, multi-region Terraform infrastructure for deploying Oracle K
 
 This project automates the deployment of:
 
-- **Multi-region OKE Clusters** - Kubernetes clusters in us-ashburn-1 and us-chicago-1
-- **VCN Networking** - Virtual Cloud Networks with public/private subnets, security lists, and multi-region DRG support
+- **Multi-tenant OKE Clusters** - Two isolated Kubernetes clusters (tenant-a, tenant-b) deployed in OCI region us-ashburn-1
+- **VCN Networking** - Virtual Cloud Networks with public/private subnets, security lists, and optional cross-tenant DRG support
 - **Network Load Balancer (NLB)** - Public load balancing for ArgoCD and Kubernetes API
 - **ArgoCD** - GitOps continuous deployment framework
 - **Kubeseal** - Sealed secrets for encrypted secret management
@@ -37,7 +37,7 @@ This project automates the deployment of:
 
 **Key Features:**
 - ✅ Infrastructure as Code (Terraform) with remote state management (Terraform Cloud)
-- ✅ Multi-region deployment support
+- ✅ Multi-tenant deployment support in a single OCI region
 - ✅ Automated ArgoCD setup with sealed secrets
 - ✅ GitOps-ready bootstrapping
 - ✅ Complete CI/CD pipeline with GitHub Actions
@@ -61,21 +61,21 @@ oci-infrastructure/
 │       └── outputs.tf                # Cluster ID, endpoints, NLB IP, kubeconfig
 │
 ├── environments/                      # Environment-specific configurations
-│   ├── us-ashburn/                   # Ashburn region deployment
+│   ├── tenant-a/                     # tenant-a deployment (us-ashburn-1)
 │   │   ├── backend.tf                # Terraform Cloud state backend
 │   │   ├── versions.tf               # Provider versions
 │   │   ├── variables.tf              # Environment variables
 │   │   ├── main.tf                   # Module instantiation
 │   │   ├── outputs.tf                # Environment-level outputs
-│   │   └── us-ashburn.auto.tfvars    # Ashburn-specific configuration
+│   │   └── tenant-a.auto.tfvars      # tenant-a-specific configuration
 │   │
-│   └── us-chicago/                   # Chicago region deployment
+│   └── tenant-b/                     # tenant-b deployment (us-ashburn-1)
 │       ├── backend.tf                # Terraform Cloud state backend
 │       ├── versions.tf               # Provider versions
 │       ├── variables.tf              # Environment variables
 │       ├── main.tf                   # Module instantiation
 │       ├── outputs.tf                # Environment-level outputs
-│       └── us-chicago.auto.tfvars    # Chicago-specific configuration
+│       └── tenant-b.auto.tfvars      # tenant-b-specific configuration
 │
 ├── .github/                           # GitHub automation
 │   ├── workflows/
@@ -142,54 +142,56 @@ Two-Stage Deployment Model:
 
 ### Environments
 
-Each environment is deployed independently and can manage its own region(s). The architecture supports a matrix strategy in GitHub Actions.
+Each environment is deployed independently. Both environments live in OCI region `us-ashburn-1` but use isolated VCNs (`10.1.0.0/16` and `10.2.0.0/16`). The architecture supports a matrix strategy in GitHub Actions keyed by `env` (tenant-a, tenant-b).
 
-#### Ashburn Region (`environments/us-ashburn/`)
+#### tenant-a (`environments/tenant-a/`)
 
-**Configuration File**: `us-ashburn.auto.tfvars`
+**Configuration File**: `tenant-a.auto.tfvars`
 
 ```hcl
 # Core OCI Settings
 tenancy_ocid           = "ocid1.tenancy.oc1..."
 compartment_id         = "ocid1.compartment.oc1..."
 region                 = "us-ashburn-1"
-availability_domain    = "AD-1"
+availability_domain    = "mMVr:US-ASHBURN-1-AD-1"
 
 # Kubernetes Configuration
-kubernetes_version     = "v1.29.1"
-node_pool_initial_size = 3
-node_pool_name         = "oke-worker-pool-ashburn"
-node_shape             = "VM.Standard.E4.Flex"  # Supports autoscaling
+kubernetes_version     = "v1.36"
+cluster_name           = "oke-prod-tenant-a"
+node_count             = 2
+node_shape             = "VM.Standard.A1.Flex"  # Ampere ARM
 
 # Networking
-vcn_cidr                = "10.1.0.0/16"    # VCN for Ashburn
-public_subnet_cidr      = "10.1.0.0/24"    # NLB subnet
-private_subnet_cidr     = "10.1.1.0/24"    # Worker nodes subnet
+vcn_cidr               = "10.1.0.0/16"          # VCN for tenant-a
+# Subnets are auto-derived: 10.1.0.0/24 (public), 10.1.1.0/24 (private)
 
 # Network Load Balancer Access Control
-nlb_allowed_cidr_blocks = ["0.0.0.0/0"]    # Allow all (restrict for production)
+nlb_allowed_cidr_blocks = ["0.0.0.0/0"]         # Allow all (restrict for production)
+node_port              = 30443                  # ArgoCD ingress
 
-# Multi-Region DRG (Optional)
-enable_drg              = false
-# drg_id                = "ocid1.drg.oc1..."
-# peer_region_pods_cidr = "10.2.244.0/22"  # Chicago pods CIDR
+# Cross-Tenant DRG (Optional)
+enable_drg             = false
+# drg_id                = "ocid1.drg.oc1.iad..."
+# peer_tenant_pods_cidr = "10.2.244.0/22"       # tenant-b pods CIDR
 ```
 
-#### Chicago Region (`environments/us-chicago/`)
+#### tenant-b (`environments/tenant-b/`)
 
-**Configuration File**: `us-chicago.auto.tfvars`
+**Configuration File**: `tenant-b.auto.tfvars`
 
 ```hcl
-# Similar structure to Ashburn with region-specific values
-vcn_cidr                = "10.2.0.0/16"
-public_subnet_cidr      = "10.2.0.0/24"
-private_subnet_cidr     = "10.2.1.0/24"
+# Same region as tenant-a, isolated VCN
+region                 = "us-ashburn-1"
+cluster_name           = "oke-prod-tenant-b"
+vcn_cidr               = "10.2.0.0/16"          # VCN for tenant-b
+node_count             = 2
+# Subnets: 10.2.0.0/24 (public), 10.2.1.0/24 (private)
 ```
 
 **Backend Configuration** (`backend.tf`):
 - Uses Terraform Cloud for state management
 - Organization: `schmhj`
-- Workspaces: `cloud-workspace-oke-ashburn`, `cloud-workspace-oke-chicago`
+- Workspaces: `oke-tenant-a`, `oke-tenant-b`
 
 ### Common Module
 
@@ -210,7 +212,7 @@ The `modules/oke/` module is a reusable, production-grade Terraform module that 
 # VCN CIDR derives subnet CIDRs automatically
 vcn_cidr = "10.1.0.0/16"    # Subnets: .0.0/24 (public), .1.0/24 (private)
 
-# Multi-region DRG peering (optional)
+# Cross-tenant DRG peering (optional)
 enable_drg = true
 drg_id = "ocid1.drg.oc1.iad..."
 ```
@@ -223,11 +225,9 @@ drg_id = "ocid1.drg.oc1.iad..."
 
 **Key Configuration:**
 ```hcl
-kubernetes_version       = "v1.29.1"
-node_pool_initial_size   = 3          # Starting node count
-node_pool_min_size       = 1          # Autoscaling minimum
-node_pool_max_size       = 10         # Autoscaling maximum
-node_shape               = "VM.Standard.E4.Flex"
+kubernetes_version       = "v1.36"
+node_count               = 2          # Total nodes per pool
+node_shape               = "VM.Standard.A1.Flex"
 ```
 
 #### 3. **Network Load Balancer** (`nlb.tf`)
@@ -254,17 +254,17 @@ nlb_allowed_cidr_blocks = ["0.0.0.0/0"]  # Restrict for production
 ### Infrastructure Components
 
 #### 1. **Virtual Cloud Network (VCN)**
-- Isolated network boundary for the Kubernetes cluster
-- CIDR block: 10.1.0.0/16 (Ashburn) or 10.2.0.0/16 (Chicago)
-- Supports DRG peering for multi-region communication
+- Isolated network boundary for each tenant's Kubernetes cluster
+- CIDR block: 10.1.0.0/16 (tenant-a) or 10.2.0.0/16 (tenant-b)
+- Supports DRG peering for cross-tenant pod communication (optional)
 
 #### 2. **Subnets**
 - **Public Subnet**: Hosts the NLB, routes to Internet Gateway
-  - CIDR: 10.1.0.0/24 (Ashburn) / 10.2.0.0/24 (Chicago)
+  - CIDR: 10.1.0.0/24 (tenant-a) / 10.2.0.0/24 (tenant-b)
   - Internet access: Outbound to 0.0.0.0/0
 
 - **Private Subnet**: Hosts OKE worker nodes, routes to NAT Gateway
-  - CIDR: 10.1.1.0/24 (Ashburn) / 10.2.1.0/24 (Chicago)
+  - CIDR: 10.1.1.0/24 (tenant-a) / 10.2.1.0/24 (tenant-b)
   - Egress-only (no inbound from internet)
 
 #### 3. **Security Lists**
@@ -313,17 +313,17 @@ kubectl --server=https://${NLB_IP}:6443 get nodes
 ```
 
 #### 5. **OKE Cluster**
-- **Kubernetes Version**: v1.29.1 (configurable)
-- **Worker Nodes**: Compute instances in private subnet
-- **Pod CIDR**: 10.244.0.0/16 (same across regions)
-- **Service CIDR**: 10.96.0.0/16 (same across regions)
+- **Kubernetes Version**: v1.36 (configurable)
+- **Worker Nodes**: Compute instances in private subnet (Ampere ARM A1.Flex)
+- **Pod CIDR**: 10.244.0.0/16 (same across tenants)
+- **Service CIDR**: 10.96.0.0/16 (same across tenants)
 - **Kubeconfig**: Generated via data source, used by argocd-deploy job
 
 ---
 
 ## Network Configuration
 
-For comprehensive network architecture, CIDR planning, security policies, and multi-region DRG setup, refer to:
+For comprehensive network architecture, CIDR planning, security policies, and cross-tenant DRG setup, refer to:
 
 📖 **[docs/NETWORK.md](docs/NETWORK.md)**
 
@@ -331,7 +331,7 @@ For comprehensive network architecture, CIDR planning, security policies, and mu
 - Network architecture diagram
 - CIDR allocation strategy (VCN, subnets, pods, services)
 - Security configuration and IP allowlisting
-- Multi-region connectivity with DRG
+- Cross-tenant connectivity with DRG
 - Network security lists in detail
 - Routing configuration
 - NLB configuration and health checks
@@ -377,9 +377,9 @@ on:
 
 **Purpose**: Deploy OCI infrastructure (VCN, OKE cluster, NLB) for each region.
 
-**Matrix Strategy**: Runs for both regions in parallel
-- **us-ashburn-1**: `environments/us-ashburn` → `oke-us-ashburn` environment
-- **us-chicago-1**: `environments/us-chicago` → `oke-us-chicago` environment
+**Matrix Strategy**: Runs for both tenants in parallel
+- **tenant-a**: `environments/tenant-a` → `oke-tenant-a` environment
+- **tenant-b**: `environments/tenant-b` → `oke-tenant-b` environment
 
 **Steps Breakdown:**
 
@@ -475,7 +475,7 @@ Ensures module can be found from environment working directory.
 ```
 - Extracts OKE cluster ID and NLB public IP from Terraform outputs
 - Stores as job outputs for downstream jobs (argocd-deploy)
-- Enables multi-region orchestration
+- Enables multi-tenant orchestration
 
 ##### 10. **Job Summary**
 ```yaml
@@ -535,7 +535,7 @@ Installs tools needed for:
 - Generate Kubeconfig
   run: ./.github/scripts/kubeconfig.sh
   env:
-    CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id_us-ashburn-1 }}
+          CLUSTER_ID: ${{ needs.oke-deploy.outputs.cluster_id_tenant-a }}
     REGION: ${{ vars.OCI_REGION }}
 ```
 - Uses OCI CLI to generate kubeconfig
@@ -588,7 +588,7 @@ helm upgrade --install argocd argo/argo-cd \
 - Update ArgoCD Initial Admin Password
   run: ./.github/scripts/argocd_updatepwd.sh
   env:
-    NLB_PUBLIC_IP: ${{ needs.oke-deploy.outputs.nlb_public_ip_us-ashburn-1 }}
+          NLB_PUBLIC_IP: ${{ needs.oke-deploy.outputs.nlb_public_ip_tenant-a }}
     ARGOCD_ADMIN_PASSWORD: ${{ secrets.ARGOCD_ADMIN_PASSWORD }}
 ```
 - Retrieves initial admin password from Kubernetes secret
@@ -951,6 +951,8 @@ kubectl rollout status deployment argocd-server -n argocd --timeout=5m
 ```bash
 kubectl apply -f bootstrap/prod/appprojects-app.yaml
 ```
+
+**Note**: The bootstrap path is keyed by tenant (`bootstrap/prod/tenant-a/`, `bootstrap/prod/tenant-b/`), not by region. See the external `schmhj/cluster-config` repo for the bootstrap manifests.
 - Creates ArgoCD AppProject resource
 - Manages project-level RBAC and source repositories
 - Enables multi-team application deployments
@@ -1295,26 +1297,26 @@ Create the following secrets in your GitHub repository:
 git clone https://github.com/schmhj/oci-infrastructure.git
 cd oci-infrastructure
 
-# Initialize Terraform for Ashburn
-cd environments/us-ashburn
+# Initialize Terraform for tenant-a
+cd environments/tenant-a
 terraform init
 
 # Preview changes
-terraform plan -var-file=us-ashburn.auto.tfvars
+terraform plan -var-file=tenant-a.auto.tfvars
 
 # Apply infrastructure
-terraform apply -var-file=us-ashburn.auto.tfvars
+terraform apply -var-file=tenant-a.auto.tfvars
 ```
 
 ### 2. Access ArgoCD
 
 ```bash
 # Get NLB public IP
-NLB_IP=$(cd environments/us-ashburn && terraform output -raw nlb_public_ip)
+NLB_IP=$(cd environments/tenant-a && terraform output -raw nlb_public_ip)
 
 # Generate kubeconfig
 oci ce cluster create-kubeconfig \
-  --cluster-id $(cd environments/us-ashburn && terraform output -raw cluster_id) \
+  --cluster-id $(cd environments/tenant-a && terraform output -raw cluster_id) \
   --file ~/.kube/config
 
 # Access ArgoCD
@@ -1339,48 +1341,48 @@ kubectl get deployments -n argocd
 
 ## Deployment Guide
 
-### Single Region Deployment (Ashburn)
+### Single Tenant Deployment (tenant-a)
 
 ```bash
 # Navigate to environment
-cd environments/us-ashburn
+cd environments/tenant-a
 
 # Initialize (first time only)
 terraform init
 
 # Plan
-terraform plan -var-file=us-ashburn.auto.tfvars
+terraform plan -var-file=tenant-a.auto.tfvars
 
 # Apply
-terraform apply -var-file=us-ashburn.auto.tfvars
+terraform apply -var-file=tenant-a.auto.tfvars
 
 # Verify
 terraform output
 ```
 
-### Multi-Region Deployment
+### Multi-Tenant Deployment
 
 ```bash
-# Both regions can be deployed in parallel
+# Both tenants can be deployed in parallel
 # The GitHub Actions workflow handles this via matrix strategy
 
 # Manual deployment:
-cd environments/us-ashburn && terraform apply -var-file=us-ashburn.auto.tfvars &
-cd environments/us-chicago && terraform apply -var-file=us-chicago.auto.tfvars &
+cd environments/tenant-a && terraform apply -var-file=tenant-a.auto.tfvars &
+cd environments/tenant-b && terraform apply -var-file=tenant-b.auto.tfvars &
 wait
 ```
 
 ### Infrastructure Cleanup
 
 ```bash
-# Destroy single region
-cd environments/us-ashburn
-terraform destroy -var-file=us-ashburn.auto.tfvars
+# Destroy single tenant
+cd environments/tenant-a
+terraform destroy -var-file=tenant-a.auto.tfvars
 
 # Destroy all
-for region in us-ashburn us-chicago; do
-  cd environments/$region
-  terraform destroy -var-file=${region}.auto.tfvars
+for env in tenant-a tenant-b; do
+  cd environments/$env
+  terraform destroy -var-file=${env}.auto.tfvars
   cd ../..
 done
 ```

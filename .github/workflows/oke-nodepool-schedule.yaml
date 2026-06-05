@@ -40,15 +40,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - region: us-ashburn-1
-            environment: oke-us-ashburn
-            working_dir: environments/us-ashburn
+          - env: tenant-a
+            region: us-ashburn-1
+            environment: oke-tenant-a
+            working_dir: environments/tenant-a
             timezone: America/New_York
             normal_size: 2
-          - region: us-chicago-1
-            environment: oke-us-chicago
-            working_dir: environments/us-chicago
-            timezone: America/Chicago
+          - env: tenant-b
+            region: us-ashburn-1
+            environment: oke-tenant-b
+            working_dir: environments/tenant-b
+            timezone: America/New_York
             normal_size: 2
     steps:
       - name: Checkout

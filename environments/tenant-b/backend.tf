@@ -3,7 +3,7 @@ terraform {
     hostname     = "app.terraform.io"
     organization = "schmhj"
     workspaces {
-      name = "oke-us-ashburn"
+      name = "oke-tenant-b"
     }
   }
 }

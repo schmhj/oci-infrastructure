@@ -1,11 +1,12 @@
 org = "schmhj"
-region = "us-chicago-1"
-cluster_name = "oke-prod-chicago"
+region = "us-ashburn-1"
+cluster_name = "oke-prod-tenant-b"
 vcn_cidr = "10.2.0.0/16"
-availability_domain = "noZa:US-CHICAGO-1-AD-1"
+
+availability_domain = "mMVr:US-ASHBURN-1-AD-1"
 kubernetes_version = "v1.36"
 node_count = 2
-node_memory_in_gb = 16
+node_memory_in_gb = 12
 node_ocpus = 2
 node_shape = "VM.Standard.A1.Flex"
 node_port = 30443
@@ -14,14 +15,15 @@ node_port = 30443
 # For production, replace with specific office/VPN CIDR blocks
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 
-# Multi-region DRG configuration (optional)
-# Uncomment and set these to enable cross-region pod communication
+# Cross-tenant pod communication (optional, via DRG)
+# Uncomment and set these to enable cross-tenant pod communication
 # enable_drg = true
 # drg_id = "ocid1.drg.oc1.iad..."  # Shared DRG ID
-# peer_region_pods_cidr = "10.1.244.0/22"  # Ashburn pods CIDR
+# peer_tenant_pods_cidr = "10.1.244.0/22"  # tenant-a pods CIDR
 
 tags = {
   "environment" = "production"
-  region = "us-chicago-1"
+  region = "us-ashburn-1"
+  tenant = "tenant-b"
   managed_by = "terraform"
 }

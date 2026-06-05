@@ -15,13 +15,13 @@ All Terraform commands are run **per-environment** from within the environment d
 
 ```bash
 # Plan (dry-run) — run from environment dir
-cd environments/us-ashburn && terraform init && terraform plan -input=false
+cd environments/tenant-a && terraform init && terraform plan -input=false
 
 # Apply
-cd environments/us-ashburn && terraform apply -auto-approve -input=false
+cd environments/tenant-a && terraform apply -auto-approve -input=false
 
 # Destroy
-cd environments/us-ashburn && terraform destroy -auto-approve -input=false
+cd environments/tenant-a && terraform destroy -auto-approve -input=false
 ```
 
 There is no local testing, linting (`terraform fmt`/`validate`), or pre-commit hook. All validation happens in CI.
@@ -29,7 +29,7 @@ There is no local testing, linting (`terraform fmt`/`validate`), or pre-commit h
 ## Architecture (Non-Obvious)
 
 - **Two-stage deployment**: (1) Terraform provisions OCI infra (VCN, OKE, NLB) → (2) GitHub Actions installs ArgoCD + Kubeseal via shell scripts. The `argocd-deploy` job depends on `oke-deploy` and passes cluster IDs/NLB IPs through job outputs.
-- **Terraform Cloud remote state**: state is in TFC, not local or S3. Each environment maps to a TFC workspace (`oke-us-ashburn`, `oke-us-chicago`). CI sets `TF_TOKEN_app_terraform_io`.
+- **Terraform Cloud remote state**: state is in TFC, not local or S3. Each environment maps to a TFC workspace (`oke-tenant-a`, `oke-tenant-b`). CI sets `TF_TOKEN_app_terraform_io`.
 - **`check_changes.sh` gates plan/apply**: on PRs → plan only; on push to main → apply; on `workflow_dispatch` → manual choice. Change detection uses `git diff HEAD^ HEAD` filtered by path prefixes.
 
 ## Conventions & Gotchas
@@ -41,12 +41,12 @@ There is no local testing, linting (`terraform fmt`/`validate`), or pre-commit h
 - **All `.github/scripts/*.sh` source [`config.sh`](.github/config.sh)** by resolving `$(dirname "${BASH_SOURCE[0]}")/..` — they depend on being invoked from the repo root so the relative path to `config.sh` resolves correctly.
 - **`.auto.tfvars` files are committed** (`.gitignore` has `!*.auto.tfvars`). Non-sensitive defaults (CIDRs, shapes, sizes) live there. **Sensitive values** (tenancy_ocid, user_ocid, fingerprint, private_key) come from **Terraform Cloud workspace variables**, not committed files.
 - **`setup_oci_credentials.sh`** writes the private key to a `.tmp` file first then `mv`s it — prevents consuming a partially written key if the process is interrupted. Uses a `trap` for cleanup.
-- **Node pool scheduling** (`oke-nodepool-schedule.yaml`) uses per-region timezones (`America/New_York`, `America/Chicago`) with a cron that runs every 15 minutes. Scale-to-zero at 10 PM local, scale-back at 8 AM local. Uses `oci ce node-pool update` directly (not Terraform) for speed.
+- **Node pool scheduling** (`oke-nodepool-schedule.yaml`) uses per-tenant timezones (`America/New_York` for both — both tenants now live in `us-ashburn-1`) with a cron that runs every 15 minutes. Scale-to-zero at 10 PM local, scale-back at 8 AM local. Uses `oci ce node-pool update` directly (not Terraform) for speed.
 - **Destroy workflow requires literal `"DESTROY"`** as input and validates the cluster OCID format (`^ocid1\.cluster\.oc1\..+`) before proceeding. Also checks that the cluster isn't already DELETING/DELETED via OCI CLI.
 
 ## Secrets & Environment Variables
 
-All sensitive values go through **GitHub Environment secrets** (two environments: `oke-us-ashburn`, `oke-us-chicago`):
+All sensitive values go through **GitHub Environment secrets** (two environments: `oke-tenant-a`, `oke-tenant-b`):
 
 | Secret | Used By |
 |--------|---------|
