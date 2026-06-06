@@ -115,7 +115,7 @@ resource "oci_containerengine_node_pool" "functional" {
   cluster_id         = oci_containerengine_cluster.oke.id
   compartment_id     = var.compartment_id
   kubernetes_version = var.kubernetes_version
-  name               = "${local.name_np}-functional"
+  name               = "${local.name_np}-workload"
   node_config_details {
     placement_configs {
       availability_domain = data.oci_identity_availability_domains.ads.availability_domains[0].name
