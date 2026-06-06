@@ -28,8 +28,10 @@ resource "oci_network_load_balancer_backend_set" "nlb_backend_set" {
 
 # Backend pool members (worker nodes from both pools)
 # One backend per node; flattened across the infra and functional pools.
+# `count` is driven by the pool size variables (not by `length(data...nodes)`)
+# because Terraform cannot determine the data-source's list size at plan time.
 resource "oci_network_load_balancer_backend" "nlb_backend_infra" {
-  count                    = length(data.oci_containerengine_node_pool.np_infra.nodes)
+  count                    = var.infra_node_count
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = var.node_port
@@ -39,7 +41,7 @@ resource "oci_network_load_balancer_backend" "nlb_backend_infra" {
 }
 
 resource "oci_network_load_balancer_backend" "nlb_backend_functional" {
-  count                    = length(data.oci_containerengine_node_pool.np_functional.nodes)
+  count                    = var.functional_node_count
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = var.node_port
