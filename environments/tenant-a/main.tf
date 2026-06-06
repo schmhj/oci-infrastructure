@@ -1,23 +1,36 @@
 module "oke" {
   source = "../../modules/oke"
-  
-  user_ocid = var.user_ocid
-  tenancy_ocid = var.tenancy_ocid
-  fingerprint = var.fingerprint
-  private_key = var.private_key
-  org = var.org
-  environment = var.environment
-  compartment_id = var.compartment_id
-  cluster_name   = var.cluster_name
-  region = var.region
-  kubernetes_version = var.kubernetes_version
-  vcn_cidr = var.vcn_cidr
+
+  user_ocid           = var.user_ocid
+  tenancy_ocid        = var.tenancy_ocid
+  fingerprint         = var.fingerprint
+  private_key         = var.private_key
+  org                 = var.org
+  environment         = var.environment
+  compartment_id      = var.compartment_id
+  cluster_name        = var.cluster_name
+  region              = var.region
+  kubernetes_version  = var.kubernetes_version
+  vcn_cidr            = var.vcn_cidr
   availability_domain = var.availability_domain
-  node_shape = var.node_shape 
-  node_count = var.node_count
-  node_ocpus = var.node_ocpus
-  node_memory_in_gb = var.node_memory_in_gb
-  node_port = var.node_port
-  tags = var.tags
+  node_shape          = var.node_shape
+  node_port           = var.node_port
+
+  # Infra pool
+  infra_node_count        = var.infra_node_count
+  infra_node_ocpus        = var.infra_node_ocpus
+  infra_node_memory_in_gb = var.infra_node_memory_in_gb
+  infra_node_label_value  = var.infra_node_label_value
+  infra_node_taint_key    = var.infra_node_taint_key
+  infra_node_taint_value  = var.infra_node_taint_value
+  infra_node_taint_effect = var.infra_node_taint_effect
+
+  # Functional pool
+  functional_node_count        = var.functional_node_count
+  functional_node_ocpus        = var.functional_node_ocpus
+  functional_node_memory_in_gb = var.functional_node_memory_in_gb
+  functional_node_label_value  = var.functional_node_label_value
+
+  tags                    = var.tags
   nlb_allowed_cidr_blocks = var.nlb_allowed_cidr_blocks
 }

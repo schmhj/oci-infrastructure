@@ -1,12 +1,12 @@
 # TFC variables for OKE module
 variable "org" {
   description = "The organisation value"
-  type = string
+  type        = string
 }
 
 variable "environment" {
   description = "The deployment environment (development, production)"
-  type = string
+  type        = string
 }
 
 
@@ -61,26 +61,86 @@ variable "availability_domain" {
 }
 
 variable "node_shape" {
-  description = "The shape of the compute instances for the cluster nodes."
+  description = "The shape of the compute instances for both node pools."
   type        = string
-  default = "VM.Standard.A1.Flex"
+  default     = "VM.Standard.A1.Flex"
 }
 
-variable "node_count" {
-  description = "The number of nodes in the cluster."
+# ============================================================
+# Infra node pool (Node 1) — small, tained, hosts infrastructure apps
+# ============================================================
+variable "infra_node_count" {
+  description = "Number of nodes in the infra node pool."
   type        = number
-  default     = 2 
+  default     = 1
 }
 
-variable "node_ocpus" {
-  description = "The number of OCPUs for each node."
+variable "infra_node_ocpus" {
+  description = "OCPUs per infra node."
   type        = number
+  default     = 1
 }
 
-variable "node_memory_in_gb" {
-  description = "The amount of memory in GBs for each node."
+variable "infra_node_memory_in_gb" {
+  description = "Memory (GB) per infra node."
   type        = number
-  default = 16
+  default     = 8
+}
+
+variable "infra_node_label_value" {
+  description = "Value of the workload= label applied to infra nodes. Functional apps nodeSelector this value."
+  type        = string
+  default     = "infra"
+}
+
+variable "infra_node_taint_key" {
+  description = "Taint key applied to infra nodes to repel functional apps."
+  type        = string
+  default     = "workload"
+}
+
+variable "infra_node_taint_value" {
+  description = "Taint value applied to infra nodes."
+  type        = string
+  default     = "infra"
+}
+
+variable "infra_node_taint_effect" {
+  description = "Taint effect on infra nodes (NoSchedule, PreferNoSchedule, NoExecute)."
+  type        = string
+  default     = "NoSchedule"
+
+  validation {
+    condition     = contains(["NoSchedule", "PreferNoSchedule", "NoExecute"], var.infra_node_taint_effect)
+    error_message = "infra_node_taint_effect must be one of: NoSchedule, PreferNoSchedule, NoExecute."
+  }
+}
+
+# ============================================================
+# Functional node pool (Node 2) — larger, hosts business/functional apps
+# ============================================================
+variable "functional_node_count" {
+  description = "Number of nodes in the functional node pool."
+  type        = number
+  default     = 1
+}
+
+variable "functional_node_ocpus" {
+  description = "OCPUs per functional node."
+  type        = number
+  default     = 3
+}
+
+variable "functional_node_memory_in_gb" {
+  description = "Memory (GB) per functional node."
+  type        = number
+  default     = 16
+}
+
+variable "functional_node_label_value" {
+  description = "Value of the workload= label applied to functional nodes. Functional apps nodeSelector this value."
+  type        = string
+  default     = "functional"
 }
 
 variable "node_port" {
