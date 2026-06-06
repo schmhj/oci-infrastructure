@@ -1,0 +1,24 @@
+---
+# tenant-b bootstrap config (no ArgoCD, no AppProject).
+# Creates the cross-cluster service account that tenant-a's ArgoCD uses
+# to authenticate to tenant-b. Applied by the argocd-deploy job when
+# matrix.bootstrap_mode == 'tenant-b-bootstrap'.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-cluster-admin
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  creationTimestamp: null
+  name: argocd-admin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: argocd-cluster-admin
+  namespace: kube-system
