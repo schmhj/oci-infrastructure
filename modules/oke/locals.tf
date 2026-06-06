@@ -24,6 +24,14 @@ locals {
   name_np  = "${local.prefixes.np}-${var.org}-${var.region}"
   name_nsg = "${local.prefixes.nsg}-${var.org}-${var.region}"
 
+  # Node names (one node per pool) — surfaced as outputs for the
+  # CI taint step and for the K8s autoscaler CronJob.
+  infra_node_name      = data.oci_containerengine_node_pool.np_infra.nodes[0].name
+  functional_node_name = data.oci_containerengine_node_pool.np_functional.nodes[0].name
+
+  # Composed taint spec; passed to apply_infra_taint.sh in CI.
+  infra_taint = "${var.infra_node_taint_key}=${var.infra_node_taint_value}:${var.infra_node_taint_effect}"
+
   # Load balancer
   name_nlb = "${local.prefixes.nlb}-${var.org}-${var.region}"
 
@@ -34,8 +42,8 @@ locals {
   # VCN CIDR - compute subnet CIDRs from VCN CIDR
   # Extract VCN prefix (first two octets) to align subnets with VCN
   # Example: VCN 10.1.0.0/16 → subnets 10.1.0.0/24 and 10.1.1.0/24
-  vcn_cidr_parts      = split(".", var.vcn_cidr)
-  vcn_prefix          = "${local.vcn_cidr_parts[0]}.${local.vcn_cidr_parts[1]}"
+  vcn_cidr_parts = split(".", var.vcn_cidr)
+  vcn_prefix     = "${local.vcn_cidr_parts[0]}.${local.vcn_cidr_parts[1]}"
 
   # Subnet CIDRs derived from VCN CIDR
   public_subnet_cidr  = "${local.vcn_prefix}.0.0/24"
