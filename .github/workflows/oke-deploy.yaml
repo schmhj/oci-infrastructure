@@ -127,7 +127,7 @@ jobs:
           mkdir -p ~/.terraform.d/plugin-cache
           for attempt in 1 2 3; do
             echo "Terraform init attempt ${attempt}/3"
-            if terraform init -input=false; then
+            if terraform init -migrate-state -input=false; then
               exit 0
             fi
 
