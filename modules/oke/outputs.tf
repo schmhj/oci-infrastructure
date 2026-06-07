@@ -35,9 +35,9 @@ output "workload_node_name" {
   description = "Kubernetes node name of the workload-pool node."
 }
 
-output "infra_node_name" {
-  value       = local.infra_node_name
-  description = "Kubernetes node name of the infra-pool node. Used by the CI taint step."
+output "infra_node_label" {
+  value       = local.infra_node_label
+  description = "Value of the tier= label applied to infra-pool nodes (e.g., \"infra\"). The CI taint step uses this to discover the K8s node(s) via `kubectl get nodes -l tier=<label>`. Empty when create_infra_pool = false."
 }
 
 output "infra_taint" {
