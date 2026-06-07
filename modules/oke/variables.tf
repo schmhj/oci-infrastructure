@@ -117,7 +117,10 @@ variable "infra_node_taint_effect" {
   default     = "NoSchedule"
 
   validation {
-    condition     = contains(["NoSchedule", "PreferNoSchedule", "NoExecute"], var.infra_node_taint_effect)
+    # Null is allowed because callers (e.g., tenant-b) pass null when
+    # create_infra_pool = false; the value is unused in that case.
+    # `contains` rejects null arguments in Terraform 1.5+, hence the guard.
+    condition     = var.infra_node_taint_effect == null || contains(["NoSchedule", "PreferNoSchedule", "NoExecute"], var.infra_node_taint_effect)
     error_message = "infra_node_taint_effect must be one of: NoSchedule, PreferNoSchedule, NoExecute."
   }
 }
