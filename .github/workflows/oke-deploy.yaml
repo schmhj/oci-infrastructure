@@ -70,8 +70,12 @@ jobs:
     outputs:
       cluster_id_tenant-a:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-a }}
       nlb_public_ip_tenant-a: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-a }}
+      infra_node_name_tenant-a: ${{ steps.get_cluster_id.outputs.infra_node_name_tenant-a }}
+      infra_taint_tenant-a: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-a }}
       cluster_id_tenant-b:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-b }}
       nlb_public_ip_tenant-b: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-b }}
+      infra_node_name_tenant-b: ${{ steps.get_cluster_id.outputs.infra_node_name_tenant-b }}
+      infra_taint_tenant-b: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-b }}
 
     steps:
       - name: Checkout
@@ -151,17 +155,21 @@ jobs:
         working-directory: ${{ matrix.working_dir }}
         run: terraform apply -auto-approve -input=false
 
-      - name: Export Cluster ID
+      - name: Export Cluster Info
         id: get_cluster_id
         if: steps.filter.outputs.run_apply == 'true'
         working-directory: ${{ matrix.working_dir }}
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
+          INFRA_NODE_NAME=$(terraform output -raw infra_node_name)
+          INFRA_TAINT=$(terraform output -raw infra_taint)
           ENV="${{ matrix.env }}"
 
           echo "cluster_id_${ENV}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
           echo "nlb_public_ip_${ENV}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
+          echo "infra_node_name_${ENV}=${INFRA_NODE_NAME}" >> $GITHUB_OUTPUT
+          echo "infra_taint_${ENV}=${INFRA_TAINT}"   >> $GITHUB_OUTPUT
 
       - name: Job Summary
         if: always()
@@ -195,12 +203,14 @@ jobs:
             working_dir: environments/tenant-a
             cluster_id_key: cluster_id_tenant-a
             nlb_public_ip_key: nlb_public_ip_tenant-a
+            bootstrap_mode: full
           - env: tenant-b
             region: us-ashburn-1
             environment: oke-tenant-b
             working_dir: environments/tenant-b
             cluster_id_key: cluster_id_tenant-b
             nlb_public_ip_key: nlb_public_ip_tenant-b
+            bootstrap_mode: tenant-b-bootstrap
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -261,23 +271,36 @@ jobs:
 
       - name : Install ArgoCD and Kubeseal Sealed Secrets
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: |
           ./.github/scripts/install.sh
 
-      - name: Start Argocd
+      - name: Apply infra node taint
         if: |
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
+        env:
+          INFRA_NODE_NAME: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_name_{0}', matrix.env)] }}
+          TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
+        run: |
+          ./.github/scripts/apply_infra_taint.sh
+
+      - name: Start Argocd
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: |
           ./.github/scripts/argocd_start.sh
 
       - name: Check if ArgoCD is already configured
         id: check_configured
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: |
           set -euo pipefail
           SVC_TYPE=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.spec.type}' 2>/dev/null || echo "None")
@@ -293,6 +316,7 @@ jobs:
         if: |
           (steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full' &&
           steps.check_configured.outputs.configured == 'false'
         env:
           NLB_PUBLIC_IP: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.nlb_public_ip_key] }}
@@ -303,15 +327,36 @@ jobs:
 
       - name : Argocd Configuration
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: |
           ./.github/scripts/argocd_sa_config.sh
 
+      - name: Apply tenant-b bootstrap SA
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'tenant-b-bootstrap'
+        run: |
+          kubectl apply -f .github/argocd/config-tenant-b-bootstrap.yaml
+
+      - name: Generate cluster registration manifest
+        id: cluster_registration
+        if: |
+          steps.filter.outputs.run_apply == 'true' &&
+          matrix.bootstrap_mode == 'tenant-b-bootstrap'
+        env:
+          TENANT_NAME: ${{ matrix.env }}
+          OUTPUT_DIR: cluster-registration
+        run: |
+          ./.github/scripts/generate_cluster_registration.sh
+
       - name : Argocd Patching
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: |
           ./.github/scripts/argocd_patch.sh
 
@@ -323,11 +368,30 @@ jobs:
         run: |
           echo "## Kubernetes Setup Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
-          echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ matrix.bootstrap_mode }}" == "full" ]]; then
+            echo "✅ ArgoCD deployed successfully" >> $GITHUB_STEP_SUMMARY
+            echo "✅ K8s RBAC configured" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Tenant-b bootstrap complete (no ArgoCD; managed by tenant-a)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ argocd-cluster-admin SA + cluster-admin binding applied" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Infra node taint applied" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
+      - name: Upload cluster registration artifact
+        if: |
+          always() &&
+          matrix.bootstrap_mode == 'tenant-b-bootstrap' &&
+          steps.cluster_registration.outputs.manifest != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: cluster-registration-${{ matrix.env }}
+          path: cluster-registration/cluster-secret.yaml
+          retention-days: 1
+          if-no-files-found: error
+
       - name: Checkout cluster-config repo
+        if: matrix.bootstrap_mode == 'full'
         uses: actions/checkout@v4
         with:
           repository: schmhj/cluster-config
@@ -335,13 +399,17 @@ jobs:
           token: ${{ secrets.GH_PAT_SECRET_ADMIN }}
 
       - name: Apply AppProjects App
+        if: matrix.bootstrap_mode == 'full'
         run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/appprojects-app.yaml
 
       - name: Apply Root App
+        if: matrix.bootstrap_mode == 'full'
         run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/root-app.yaml
 
       - name: Bootstrap Summary
-        if: success()
+        if: |
+          success() &&
+          matrix.bootstrap_mode == 'full'
         run: |
           echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

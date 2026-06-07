@@ -17,6 +17,7 @@ module "oke" {
   node_port           = var.node_port
 
   # Infra pool
+  create_infra_pool       = var.create_infra_pool
   infra_node_count        = var.infra_node_count
   infra_node_ocpus        = var.infra_node_ocpus
   infra_node_memory_in_gb = var.infra_node_memory_in_gb
@@ -25,11 +26,11 @@ module "oke" {
   infra_node_taint_value  = var.infra_node_taint_value
   infra_node_taint_effect = var.infra_node_taint_effect
 
-  # Functional pool
-  functional_node_count        = var.functional_node_count
-  functional_node_ocpus        = var.functional_node_ocpus
-  functional_node_memory_in_gb = var.functional_node_memory_in_gb
-  functional_node_label_value  = var.functional_node_label_value
+  # Workload pool
+  workload_node_count        = var.workload_node_count
+  workload_node_ocpus        = var.workload_node_ocpus
+  workload_node_memory_in_gb = var.workload_node_memory_in_gb
+  workload_node_label_value  = var.workload_node_label_value
 
   tags                    = var.tags
   nlb_allowed_cidr_blocks = var.nlb_allowed_cidr_blocks

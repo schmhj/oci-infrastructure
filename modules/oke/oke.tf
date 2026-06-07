@@ -19,13 +19,15 @@ data "oci_containerengine_cluster_kube_config" "oke_kubeconfig" {
 }
 
 # Per-pool data sources: one node each, queried by index [0].
-# Used by NLB and the CI taint step.
+# Used by NLB and the CI taint step. The infra data source is skipped
+# when create_infra_pool = false.
 data "oci_containerengine_node_pool" "np_infra" {
-  node_pool_id = oci_containerengine_node_pool.infra.id
+  count        = var.create_infra_pool ? 1 : 0
+  node_pool_id = oci_containerengine_node_pool.infra[0].id
 }
 
-data "oci_containerengine_node_pool" "np_functional" {
-  node_pool_id = oci_containerengine_node_pool.functional.id
+data "oci_containerengine_node_pool" "np_workload" {
+  node_pool_id = oci_containerengine_node_pool.workload.id
 }
 
 resource "oci_containerengine_cluster" "oke" {
@@ -57,11 +59,12 @@ resource "oci_containerengine_cluster" "oke" {
 # ============================================================
 # Infra node pool (Node 1)
 # - Small (1 OCPU / 8 GB by default)
-# - Label workload=<infra_node_label_value> (default: infra)
+# - Label tier=<infra_node_label_value> (default: infra)
 # - Taint applied post-provisioning (OCI API does not support
 #   taints at node-pool creation time)
 # ============================================================
 resource "oci_containerengine_node_pool" "infra" {
+  count              = var.create_infra_pool ? 1 : 0
   cluster_id         = oci_containerengine_cluster.oke.id
   compartment_id     = var.compartment_id
   kubernetes_version = var.kubernetes_version
@@ -100,18 +103,18 @@ resource "oci_containerengine_node_pool" "infra" {
   }
 
   initial_node_labels {
-    key   = "workload"
+    key   = "tier"
     value = var.infra_node_label_value
   }
 }
 
 # ============================================================
-# Functional node pool (Node 2)
+# Workload node pool (Node 2)
 # - Larger (3 OCPUs / 16 GB by default)
-# - Label workload=<functional_node_label_value> (default: functional)
-# - No taint; functional apps nodeSelector this label
+# - Label tier=<workload_node_label_value> (default: workload)
+# - No taint; workload apps nodeSelector this label
 # ============================================================
-resource "oci_containerengine_node_pool" "functional" {
+resource "oci_containerengine_node_pool" "workload" {
   cluster_id         = oci_containerengine_cluster.oke.id
   compartment_id     = var.compartment_id
   kubernetes_version = var.kubernetes_version
@@ -129,14 +132,14 @@ resource "oci_containerengine_node_pool" "functional" {
       availability_domain = data.oci_identity_availability_domains.ads.availability_domains[2].name
       subnet_id           = oci_core_subnet.vcn_private_subnet.id
     }
-    size = var.functional_node_count
+    size = var.workload_node_count
   }
 
   node_shape = var.node_shape
 
   node_shape_config {
-    memory_in_gbs = var.functional_node_memory_in_gb
-    ocpus         = var.functional_node_ocpus
+    memory_in_gbs = var.workload_node_memory_in_gb
+    ocpus         = var.workload_node_ocpus
   }
 
   node_source_details {
@@ -150,7 +153,20 @@ resource "oci_containerengine_node_pool" "functional" {
   }
 
   initial_node_labels {
-    key   = "workload"
-    value = var.functional_node_label_value
+    key   = "tier"
+    value = var.workload_node_label_value
   }
+}
+
+# State migration: rename the pool from `functional` to `workload` without
+# destroying/recreating it. Terraform 1.1+ records the rename in state on
+# the next plan/apply. Remove these blocks after the first successful apply.
+moved {
+  from = oci_containerengine_node_pool.functional
+  to   = oci_containerengine_node_pool.workload
+}
+
+moved {
+  from = data.oci_containerengine_node_pool.np_functional
+  to   = data.oci_containerengine_node_pool.np_workload
 }

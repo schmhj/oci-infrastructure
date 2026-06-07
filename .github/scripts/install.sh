@@ -25,6 +25,41 @@ else
   )
 fi
 
+# Infra node (Node 1) carries taint tier=infra:NoSchedule. ArgoCD must
+# tolerate it AND prefer the infra node so the four components (server,
+# controller, repoServer, applicationsetController) all land there.
+# Workload apps use nodeSelector tier=workload to land on Node 2.
+INFRA_TAINT_KEY="tier"
+INFRA_TAINT_VALUE="infra"
+INFRA_TAINT_EFFECT="NoSchedule"
+INFRA_NODE_LABEL="infra"
+
+INFRA_TOLERATIONS=(
+  --set "server.tolerations[0].key=${INFRA_TAINT_KEY}"
+  --set "server.tolerations[0].operator=Equal"
+  --set "server.tolerations[0].value=${INFRA_TAINT_VALUE}"
+  --set "server.tolerations[0].effect=${INFRA_TAINT_EFFECT}"
+  --set "controller.tolerations[0].key=${INFRA_TAINT_KEY}"
+  --set "controller.tolerations[0].operator=Equal"
+  --set "controller.tolerations[0].value=${INFRA_TAINT_VALUE}"
+  --set "controller.tolerations[0].effect=${INFRA_TAINT_EFFECT}"
+  --set "repoServer.tolerations[0].key=${INFRA_TAINT_KEY}"
+  --set "repoServer.tolerations[0].operator=Equal"
+  --set "repoServer.tolerations[0].value=${INFRA_TAINT_VALUE}"
+  --set "repoServer.tolerations[0].effect=${INFRA_TAINT_EFFECT}"
+  --set "applicationsetController.tolerations[0].key=${INFRA_TAINT_KEY}"
+  --set "applicationsetController.tolerations[0].operator=Equal"
+  --set "applicationsetController.tolerations[0].value=${INFRA_TAINT_VALUE}"
+  --set "applicationsetController.tolerations[0].effect=${INFRA_TAINT_EFFECT}"
+)
+
+INFRA_NODESELECTORS=(
+  --set "server.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "controller.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "repoServer.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "applicationsetController.nodeSelector.tier=${INFRA_NODE_LABEL}"
+)
+
 success "Installing/upgrading ArgoCD to v${ARGOCD_HELM_VERSION}..."
 helm repo add argo "$ARGOCD_HELM_REPO" || warn "ArgoCD helm repo may already exist"
 helm repo update || fail "Failed to update helm repos"
@@ -35,6 +70,8 @@ run_helm_upgrade() {
     --namespace "$ARGOCD_HELM_NAMESPACE" \
     --create-namespace \
     "${SERVICE_FLAGS[@]}" \
+    "${INFRA_TOLERATIONS[@]}" \
+    "${INFRA_NODESELECTORS[@]}" \
     --set "configs.cm.kustomize\.buildOptions=--enable-helm" \
     --set "configs.cm.application\.sync\.impersonation\.enabled=true"
 }

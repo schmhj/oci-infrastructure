@@ -1,20 +1,27 @@
-name: OKE Node Pool Schedule
+# DEPRECATED for scheduled runs — the in-cluster Kubernetes CronJob
+# (apps/oci-autoscaler in the cluster-config repo) is now the source of
+# truth for workload-pool autoscaling. This workflow is retained for
+# manual workflow_dispatch only; use it as a fallback if the CronJob
+# fails or for one-off ops. The schedule block below is intentionally
+# commented out — do not uncomment without first removing the CronJob
+# or you will get double-scaling.
+name: OKE Node Pool Schedule (manual fallback)
 
 on:
-  schedule:
-    # Run every 15 minutes to evaluate local time.
-    - cron: '*/15 * * * *'
+  # schedule:
+  #   # Run every 15 minutes to evaluate local time.
+  #   - cron: '*/15 * * * *'
   workflow_dispatch:
     inputs:
       action:
-        description: 'Choose auto to follow the 10 PM stop / 8 AM start schedule'
+        description: 'Manual scale action. With cron disabled, "auto" still works as a one-shot "what would the schedule do right now" trigger. "start"/"stop" scale the infra pool to its normal size or to 0.'
         required: true
-        default: auto
+        default: start
         type: choice
         options:
-          - auto
           - start
           - stop
+          - auto
 
 permissions:
   contents: read
@@ -45,13 +52,16 @@ jobs:
             environment: oke-tenant-a
             working_dir: environments/tenant-a
             timezone: America/New_York
-            normal_size: 2
+            # `node_pool_id` is aliased to the infra pool (1 node). The
+            # workload pool (3 OCPUs/16 GB) is not touched by this
+            # fallback — use the in-cluster CronJob or OCI CLI directly.
+            normal_size: 1
           - env: tenant-b
             region: us-ashburn-1
             environment: oke-tenant-b
             working_dir: environments/tenant-b
             timezone: America/New_York
-            normal_size: 2
+            normal_size: 1
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -107,23 +117,29 @@ jobs:
         working-directory: ${{ matrix.working_dir }}
         run: terraform init -input=false
 
-      - name: Read node pool ID
+      - name: Read infra node pool ID
         if: steps.action.outputs.action != 'skip'
         id: node_pool
         working-directory: ${{ matrix.working_dir }}
         run: |
           set -euo pipefail
 
+          # `node_pool_id` is aliased to the infra pool (see
+          # modules/oke/outputs.tf). For the workload pool, use
+          # `terraform output workload_node_pool_id`. Tenants with
+          # create_infra_pool = false get an empty value — skip cleanly
+          # rather than failing with a misleading "state broken" error.
           NODE_POOL_ID="$(terraform output -raw node_pool_id)"
           if [[ -z "$NODE_POOL_ID" ]]; then
-            echo "Failed to resolve node_pool_id from Terraform output" >&2
-            exit 1
+            echo "::warning::node_pool_id is empty; cluster has no infra pool (create_infra_pool = false). Nothing to scale."
+            echo "node_pool_id=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           echo "node_pool_id=$NODE_POOL_ID" >> "$GITHUB_OUTPUT"
 
       - name: Scale node pool
-        if: steps.action.outputs.action != 'skip'
+        if: steps.action.outputs.action != 'skip' && steps.node_pool.outputs.node_pool_id != ''
         working-directory: ${{ matrix.working_dir }}
         env:
           ACTION: ${{ steps.action.outputs.action }}
@@ -141,7 +157,7 @@ jobs:
             exit 1
           fi
 
-          echo "Updating node pool $NODE_POOL_ID in $OCI_REGION to size $TARGET_SIZE"
+          echo "Updating infra node pool $NODE_POOL_ID in $OCI_REGION to size $TARGET_SIZE"
           oci ce node-pool update \
             --node-pool-id "$NODE_POOL_ID" \
             --size "$TARGET_SIZE" \
@@ -154,13 +170,15 @@ jobs:
           REQUESTED_ACTION: ${{ github.event.inputs.action }}
         run: |
           {
-            echo "## Node Pool Schedule Summary"
+            echo "## Node Pool Schedule Summary (manual fallback)"
             echo "- **Region**: ${{ matrix.region }}"
             echo "- **Timezone**: ${{ matrix.timezone }}"
             echo "- **Local time**: ${{ steps.action.outputs.local_time }}"
             echo "- **Requested action**: ${REQUESTED_ACTION:-auto}"
             echo "- **Resolved action**: ${{ steps.action.outputs.action }}"
             if [[ "${{ steps.action.outputs.action }}" != "skip" ]]; then
-              echo "- **Node pool ID**: ${{ steps.node_pool.outputs.node_pool_id }}"
+              echo "- **Infra node pool ID**: ${{ steps.node_pool.outputs.node_pool_id }}"
             fi
+            echo ""
+            echo "_Note: This workflow scales only the infra pool (1 node). The workload pool is autoscaled by an in-cluster Kubernetes CronJob._"
           } >> "$GITHUB_STEP_SUMMARY"

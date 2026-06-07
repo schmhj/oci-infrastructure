@@ -13,20 +13,26 @@ output "public_subnet_id" {
 }
 
 # Backward-compatible alias: existing scripts and the (paused) schedule
-# workflow read node_pool_id. Maps to the infra pool (always-on, 1 node).
+# workflow read node_pool_id. Maps to the infra pool (always-on, 1 node)
+# when create_infra_pool = true; empty otherwise.
 output "node_pool_id" {
-  value       = oci_containerengine_node_pool.infra.id
-  description = "Infra node pool OCID (alias for backward compatibility)."
+  value       = var.create_infra_pool ? oci_containerengine_node_pool.infra[0].id : ""
+  description = "Infra node pool OCID (alias for backward compatibility). Empty when create_infra_pool = false."
 }
 
 output "infra_node_pool_id" {
-  value       = oci_containerengine_node_pool.infra.id
-  description = "Infra node pool OCID (small node, taint workload=infra:NoSchedule)."
+  value       = var.create_infra_pool ? oci_containerengine_node_pool.infra[0].id : ""
+  description = "Infra node pool OCID (small node, taint tier=infra:NoSchedule). Empty when create_infra_pool = false."
 }
 
-output "functional_node_pool_id" {
-  value       = oci_containerengine_node_pool.functional.id
-  description = "Functional node pool OCID (larger node, no taint)."
+output "workload_node_pool_id" {
+  value       = oci_containerengine_node_pool.workload.id
+  description = "Workload node pool OCID (larger node, no taint)."
+}
+
+output "workload_node_name" {
+  value       = local.workload_node_name
+  description = "Kubernetes node name of the workload-pool node."
 }
 
 output "infra_node_name" {
@@ -34,14 +40,9 @@ output "infra_node_name" {
   description = "Kubernetes node name of the infra-pool node. Used by the CI taint step."
 }
 
-output "functional_node_name" {
-  value       = local.functional_node_name
-  description = "Kubernetes node name of the functional-pool node."
-}
-
 output "infra_taint" {
   value       = local.infra_taint
-  description = "Taint spec applied to the infra node post-provisioning (e.g., workload=infra:NoSchedule)."
+  description = "Taint spec applied to the infra node post-provisioning (e.g., tier=infra:NoSchedule)."
 }
 
 output "nlb_public_ip" {
