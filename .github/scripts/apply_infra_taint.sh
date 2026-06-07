@@ -5,15 +5,24 @@
 # keep the cluster's networking plugins running on the infra node.
 #
 # Required env:
-#   INFRA_NODE_NAME  - Kubernetes node name of the infra-pool node.
-#                      May be empty when the cluster has create_infra_pool = false;
-#                      the script then exits 0 without doing any kubectl work.
-#   TAINT            - Taint spec in the form "key=value:effect"
-#                      (e.g., "tier=infra:NoSchedule"). Unused when
-#                      INFRA_NODE_NAME is empty.
+#   INFRA_NODE_LABEL  - Value of the tier= kubelet label applied to
+#                       infra-pool nodes (e.g., "infra"). The script
+#                       uses this to discover the K8s node(s) via
+#                       `kubectl get nodes -l tier=<label>`; we do NOT
+#                       use the OCI-generated node name because OKE
+#                       registers K8s nodes using the node's private
+#                       IP, not the OCI control-plane identifier
+#                       (`oke-xxx-0` format). May be empty when the
+#                       cluster has create_infra_pool = false; the
+#                       script then exits 0 without doing any kubectl
+#                       work.
+#   TAINT             - Taint spec in the form "key=value:effect"
+#                       (e.g., "tier=infra:NoSchedule"). Unused when
+#                       INFRA_NODE_LABEL is empty.
 #
 # Idempotent: safe to re-run on every CI apply. --overwrite=true updates
 # the existing taint in place; toleration patches skip if already present.
+# Taints ALL nodes with the matching label, so works for infra_node_count > 1.
 
 set -euo pipefail
 
@@ -26,8 +35,8 @@ source "$SCRIPT_DIR/config.sh"
 # and don't need patching. Exit cleanly. Must run before any require_env /
 # require_cmd so tenant-b's first deploy doesn't fail on missing kubectl
 # or an unset TAINT.
-if [[ -z "${INFRA_NODE_NAME:-}" ]]; then
-  warn "INFRA_NODE_NAME is empty (cluster has no infra pool); skipping taint + DaemonSet patches"
+if [[ -z "${INFRA_NODE_LABEL:-}" ]]; then
+  warn "INFRA_NODE_LABEL is empty (cluster has no infra pool); skipping taint + DaemonSet patches"
   exit 0
 fi
 
@@ -46,37 +55,53 @@ TAINT_VALUE="${REST%%:*}"
 TAINT_EFFECT="${REST#*:}"
 
 # ============================================================
-# 1. Apply the taint to the infra node
+# 1. Apply the taint to infra node(s)
 # ============================================================
 
-# Wait for the node to be visible in the Kubernetes API. OCI may return
-# the node name from the data source before kubelet has finished
-# registering the node with the API server; this race condition causes
-# "nodes not found" errors on first apply after cluster creation.
-success "Waiting for node '${INFRA_NODE_NAME}' to be visible in Kubernetes..."
+# Find infra nodes by the kubelet `tier=<label>` label. OKE applies
+# this via `initial_node_labels` in the node-pool config, so it is
+# present as soon as kubelet registers with the API server.
+LABEL_SELECTOR="tier=${INFRA_NODE_LABEL}"
+
+# Wait for at least one node with the label to be visible. OKE may
+# complete cloud-init before kubelet has finished registering the node
+# with the API server; this race causes "nodes not found" errors on
+# first apply after cluster creation. The `|| true` on kubectl lets
+# us retry on transient errors (e.g., token refresh) instead of
+# failing the whole script.
+success "Waiting for node(s) with label '${LABEL_SELECTOR}' to be visible in Kubernetes..."
 WAIT_RETRIES=30
 WAIT_DELAY=10
+INFRA_NODES=""
 for ((i = 1; i <= WAIT_RETRIES; i++)); do
-  if kubectl get node "$INFRA_NODE_NAME" >/dev/null 2>&1; then
-    success "Node is visible (attempt $i/$WAIT_RETRIES)"
+  INFRA_NODES=$(kubectl get nodes -l "$LABEL_SELECTOR" \
+    -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' 2>/dev/null || true)
+  if [[ -n "$INFRA_NODES" ]]; then
+    NODE_COUNT=$(printf '%s' "$INFRA_NODES" | grep -c .)
+    success "Found ${NODE_COUNT} node(s) with label '${LABEL_SELECTOR}' (attempt $i/$WAIT_RETRIES)"
     break
   fi
   if [[ $i -eq $WAIT_RETRIES ]]; then
-    fail "Node '${INFRA_NODE_NAME}' not visible in Kubernetes after $((WAIT_RETRIES * WAIT_DELAY))s"
+    fail "No node with label '${LABEL_SELECTOR}' visible in Kubernetes after $((WAIT_RETRIES * WAIT_DELAY))s"
   fi
-  warn "Node not yet visible; retrying in ${WAIT_DELAY}s (attempt $i/$WAIT_RETRIES)..."
+  warn "No labeled node yet; retrying in ${WAIT_DELAY}s (attempt $i/$WAIT_RETRIES)..."
   sleep "$WAIT_DELAY"
 done
 
-success "Applying taint '${TAINT}' to node '${INFRA_NODE_NAME}'..."
-kubectl taint node "$INFRA_NODE_NAME" "$TAINT" --overwrite=true
+# Apply taint to each matching node. Looping (rather than tainting
+# just nodes[0]) supports infra_node_count > 1 in the future.
+while IFS= read -r NODE; do
+  [[ -z "$NODE" ]] && continue
+  success "Applying taint '${TAINT}' to node '${NODE}'..."
+  kubectl taint node "$NODE" "$TAINT" --overwrite=true
 
-# Verify
-if ! kubectl get node "$INFRA_NODE_NAME" -o jsonpath='{.spec.taints}' \
-     | grep -qF "$TAINT"; then
-  fail "Taint '${TAINT}' not found on node '${INFRA_NODE_NAME}' after apply"
-fi
-success "Taint '${TAINT}' verified on '${INFRA_NODE_NAME}'"
+  # Verify
+  if ! kubectl get node "$NODE" -o jsonpath='{.spec.taints}' \
+       | grep -qF "$TAINT"; then
+    fail "Taint '${TAINT}' not found on node '${NODE}' after apply"
+  fi
+  success "Taint '${TAINT}' verified on '${NODE}'"
+done <<< "$INFRA_NODES"
 
 # ============================================================
 # 2. Patch OKE-managed DaemonSets to tolerate the taint

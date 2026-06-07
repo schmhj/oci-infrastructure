@@ -70,11 +70,11 @@ jobs:
     outputs:
       cluster_id_tenant-a:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-a }}
       nlb_public_ip_tenant-a: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-a }}
-      infra_node_name_tenant-a: ${{ steps.get_cluster_id.outputs.infra_node_name_tenant-a }}
+      infra_node_label_tenant-a: ${{ steps.get_cluster_id.outputs.infra_node_label_tenant-a }}
       infra_taint_tenant-a: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-a }}
       cluster_id_tenant-b:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-b }}
       nlb_public_ip_tenant-b: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-b }}
-      infra_node_name_tenant-b: ${{ steps.get_cluster_id.outputs.infra_node_name_tenant-b }}
+      infra_node_label_tenant-b: ${{ steps.get_cluster_id.outputs.infra_node_label_tenant-b }}
       infra_taint_tenant-b: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-b }}
 
     steps:
@@ -162,13 +162,13 @@ jobs:
         run: |
           CLUSTER_ID=$(terraform output -raw cluster_id)
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
-          INFRA_NODE_NAME=$(terraform output -raw infra_node_name)
+          INFRA_NODE_LABEL=$(terraform output -raw infra_node_label)
           INFRA_TAINT=$(terraform output -raw infra_taint)
           ENV="${{ matrix.env }}"
 
           echo "cluster_id_${ENV}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
           echo "nlb_public_ip_${ENV}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
-          echo "infra_node_name_${ENV}=${INFRA_NODE_NAME}" >> $GITHUB_OUTPUT
+          echo "infra_node_label_${ENV}=${INFRA_NODE_LABEL}" >> $GITHUB_OUTPUT
           echo "infra_taint_${ENV}=${INFRA_TAINT}"   >> $GITHUB_OUTPUT
 
       - name: Job Summary
@@ -282,7 +282,7 @@ jobs:
           steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true'
         env:
-          INFRA_NODE_NAME: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_name_{0}', matrix.env)] }}
+          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
           TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
         run: |
           ./.github/scripts/apply_infra_taint.sh

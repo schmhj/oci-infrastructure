@@ -24,11 +24,14 @@ locals {
   name_np  = "${local.prefixes.np}-${var.org}-${var.region}"
   name_nsg = "${local.prefixes.nsg}-${var.org}-${var.region}"
 
-  # Node names (one node per pool) — surfaced as outputs for the
-  # CI taint step and for the K8s autoscaler CronJob. When
-  # create_infra_pool = false, infra_node_name is "" and the taint
+  # Node labels — surfaced as outputs for the CI taint step. The label
+  # value (e.g., "infra") is what we pass to the script; the script
+  # uses `kubectl get nodes -l tier=<label>` to discover the actual
+  # K8s node name (the OCI control-plane name like `oke-xxx-0` is NOT
+  # the K8s node name in OKE — K8s registers by private IP). When
+  # create_infra_pool = false, infra_node_label is "" and the taint
   # script becomes a no-op.
-  infra_node_name    = var.create_infra_pool ? data.oci_containerengine_node_pool.np_infra[0].nodes[0].name : ""
+  infra_node_label   = var.create_infra_pool ? var.infra_node_label_value : ""
   workload_node_name = data.oci_containerengine_node_pool.np_workload.nodes[0].name
 
   # Composed taint spec (e.g., tier=infra:NoSchedule); passed to

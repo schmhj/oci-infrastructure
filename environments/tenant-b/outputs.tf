@@ -28,9 +28,9 @@ output "workload_node_pool_id" {
   value       = module.oke.workload_node_pool_id
 }
 
-output "infra_node_name" {
-  description = "Kubernetes node name of the infra-pool node. Empty when tenant-b has create_infra_pool = false."
-  value       = module.oke.infra_node_name
+output "infra_node_label" {
+  description = "Value of the tier= label applied to infra-pool nodes. Empty when tenant-b has create_infra_pool = false."
+  value       = module.oke.infra_node_label
 }
 
 output "workload_node_name" {
