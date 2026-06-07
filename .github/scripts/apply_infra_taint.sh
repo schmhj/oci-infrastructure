@@ -48,6 +48,26 @@ TAINT_EFFECT="${REST#*:}"
 # ============================================================
 # 1. Apply the taint to the infra node
 # ============================================================
+
+# Wait for the node to be visible in the Kubernetes API. OCI may return
+# the node name from the data source before kubelet has finished
+# registering the node with the API server; this race condition causes
+# "nodes not found" errors on first apply after cluster creation.
+success "Waiting for node '${INFRA_NODE_NAME}' to be visible in Kubernetes..."
+WAIT_RETRIES=30
+WAIT_DELAY=10
+for ((i = 1; i <= WAIT_RETRIES; i++)); do
+  if kubectl get node "$INFRA_NODE_NAME" >/dev/null 2>&1; then
+    success "Node is visible (attempt $i/$WAIT_RETRIES)"
+    break
+  fi
+  if [[ $i -eq $WAIT_RETRIES ]]; then
+    fail "Node '${INFRA_NODE_NAME}' not visible in Kubernetes after $((WAIT_RETRIES * WAIT_DELAY))s"
+  fi
+  warn "Node not yet visible; retrying in ${WAIT_DELAY}s (attempt $i/$WAIT_RETRIES)..."
+  sleep "$WAIT_DELAY"
+done
+
 success "Applying taint '${TAINT}' to node '${INFRA_NODE_NAME}'..."
 kubectl taint node "$INFRA_NODE_NAME" "$TAINT" --overwrite=true
 
