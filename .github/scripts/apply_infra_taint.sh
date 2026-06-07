@@ -95,9 +95,10 @@ while IFS= read -r NODE; do
   success "Applying taint '${TAINT}' to node '${NODE}'..."
   kubectl taint node "$NODE" "$TAINT" --overwrite=true
 
-  # Verify
-  if ! kubectl get node "$NODE" -o jsonpath='{.spec.taints}' \
-       | grep -qF "$TAINT"; then
+  # Verify — jsonpath outputs each taint as key=value:effect per line
+  if ! kubectl get node "$NODE" \
+       -o jsonpath='{range .spec.taints[*]}{.key}={.value}:{.effect}{"\n"}{end}' \
+       | grep -qxF "$TAINT"; then
     fail "Taint '${TAINT}' not found on node '${NODE}' after apply"
   fi
   success "Taint '${TAINT}' verified on '${NODE}'"
