@@ -1,6 +1,6 @@
 # DEPRECATED for scheduled runs — the in-cluster Kubernetes CronJob
 # (apps/oci-autoscaler in the cluster-config repo) is now the source of
-# truth for functional-pool autoscaling. This workflow is retained for
+# truth for workload-pool autoscaling. This workflow is retained for
 # manual workflow_dispatch only; use it as a fallback if the CronJob
 # fails or for one-off ops. The schedule block below is intentionally
 # commented out — do not uncomment without first removing the CronJob
@@ -53,7 +53,7 @@ jobs:
             working_dir: environments/tenant-a
             timezone: America/New_York
             # `node_pool_id` is aliased to the infra pool (1 node). The
-            # functional pool (3 OCPUs/16 GB) is not touched by this
+            # workload pool (3 OCPUs/16 GB) is not touched by this
             # fallback — use the in-cluster CronJob or OCI CLI directly.
             normal_size: 1
           - env: tenant-b
@@ -125,18 +125,21 @@ jobs:
           set -euo pipefail
 
           # `node_pool_id` is aliased to the infra pool (see
-          # modules/oke/outputs.tf). For the functional pool, use
-          # `terraform output functional_node_pool_id`.
+          # modules/oke/outputs.tf). For the workload pool, use
+          # `terraform output workload_node_pool_id`. Tenants with
+          # create_infra_pool = false get an empty value — skip cleanly
+          # rather than failing with a misleading "state broken" error.
           NODE_POOL_ID="$(terraform output -raw node_pool_id)"
           if [[ -z "$NODE_POOL_ID" ]]; then
-            echo "Failed to resolve node_pool_id from Terraform output" >&2
-            exit 1
+            echo "::warning::node_pool_id is empty; cluster has no infra pool (create_infra_pool = false). Nothing to scale."
+            echo "node_pool_id=" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           echo "node_pool_id=$NODE_POOL_ID" >> "$GITHUB_OUTPUT"
 
       - name: Scale node pool
-        if: steps.action.outputs.action != 'skip'
+        if: steps.action.outputs.action != 'skip' && steps.node_pool.outputs.node_pool_id != ''
         working-directory: ${{ matrix.working_dir }}
         env:
           ACTION: ${{ steps.action.outputs.action }}
@@ -177,5 +180,5 @@ jobs:
               echo "- **Infra node pool ID**: ${{ steps.node_pool.outputs.node_pool_id }}"
             fi
             echo ""
-            echo "_Note: This workflow scales only the infra pool (1 node). The functional pool is autoscaled by an in-cluster Kubernetes CronJob._"
+            echo "_Note: This workflow scales only the infra pool (1 node). The workload pool is autoscaled by an in-cluster Kubernetes CronJob._"
           } >> "$GITHUB_STEP_SUMMARY"

@@ -45,6 +45,12 @@ variable "node_shape" {
 }
 
 # Infra pool (Node 1)
+variable "create_infra_pool" {
+  description = "Whether to create the infra node pool. Default true (tenant-a always has an infra node for ArgoCD)."
+  type        = bool
+  default     = true
+}
+
 variable "infra_node_count" {
   description = "Number of nodes in the infra node pool."
   type        = number
@@ -64,15 +70,15 @@ variable "infra_node_memory_in_gb" {
 }
 
 variable "infra_node_label_value" {
-  description = "Value of the workload= label applied to infra nodes."
+  description = "Value of the tier= label applied to infra nodes."
   type        = string
   default     = "infra"
 }
 
 variable "infra_node_taint_key" {
-  description = "Taint key applied to infra nodes to repel functional apps."
+  description = "Taint key applied to infra nodes to repel workload apps."
   type        = string
-  default     = "workload"
+  default     = "tier"
 }
 
 variable "infra_node_taint_value" {
@@ -87,29 +93,29 @@ variable "infra_node_taint_effect" {
   default     = "NoSchedule"
 }
 
-# Functional pool (Node 2)
-variable "functional_node_count" {
-  description = "Number of nodes in the functional node pool."
+# Workload pool (Node 2)
+variable "workload_node_count" {
+  description = "Number of nodes in the workload node pool."
   type        = number
   default     = 1
 }
 
-variable "functional_node_ocpus" {
-  description = "OCPUs per functional node."
+variable "workload_node_ocpus" {
+  description = "OCPUs per workload node."
   type        = number
   default     = 3
 }
 
-variable "functional_node_memory_in_gb" {
-  description = "Memory (GB) per functional node."
+variable "workload_node_memory_in_gb" {
+  description = "Memory (GB) per workload node."
   type        = number
   default     = 16
 }
 
-variable "functional_node_label_value" {
-  description = "Value of the workload= label applied to functional nodes."
+variable "workload_node_label_value" {
+  description = "Value of the tier= label applied to workload nodes."
   type        = string
-  default     = "functional"
+  default     = "workload"
 }
 
 variable "node_port" {

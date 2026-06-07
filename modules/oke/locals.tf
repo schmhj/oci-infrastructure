@@ -25,12 +25,17 @@ locals {
   name_nsg = "${local.prefixes.nsg}-${var.org}-${var.region}"
 
   # Node names (one node per pool) — surfaced as outputs for the
-  # CI taint step and for the K8s autoscaler CronJob.
-  infra_node_name      = data.oci_containerengine_node_pool.np_infra.nodes[0].name
-  functional_node_name = data.oci_containerengine_node_pool.np_functional.nodes[0].name
+  # CI taint step and for the K8s autoscaler CronJob. When
+  # create_infra_pool = false, infra_node_name is "" and the taint
+  # script becomes a no-op.
+  infra_node_name    = var.create_infra_pool ? data.oci_containerengine_node_pool.np_infra[0].nodes[0].name : ""
+  workload_node_name = data.oci_containerengine_node_pool.np_workload.nodes[0].name
 
-  # Composed taint spec; passed to apply_infra_taint.sh in CI.
-  infra_taint = "${var.infra_node_taint_key}=${var.infra_node_taint_value}:${var.infra_node_taint_effect}"
+  # Composed taint spec (e.g., tier=infra:NoSchedule); passed to
+  # apply_infra_taint.sh in CI. Empty when create_infra_pool = false —
+  # there is no infra node to taint and the taint script exits 0
+  # without using the value.
+  infra_taint = var.create_infra_pool ? "${var.infra_node_taint_key}=${var.infra_node_taint_value}:${var.infra_node_taint_effect}" : ""
 
   # Load balancer
   name_nlb = "${local.prefixes.nlb}-${var.org}-${var.region}"

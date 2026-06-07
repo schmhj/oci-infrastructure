@@ -25,11 +25,11 @@ else
   )
 fi
 
-# Infra node (Node 1) carries taint workload=infra:NoSchedule. ArgoCD must
+# Infra node (Node 1) carries taint tier=infra:NoSchedule. ArgoCD must
 # tolerate it AND prefer the infra node so the four components (server,
 # controller, repoServer, applicationsetController) all land there.
-# Functional apps use nodeSelector workload=functional to land on Node 2.
-INFRA_TAINT_KEY="workload"
+# Workload apps use nodeSelector tier=workload to land on Node 2.
+INFRA_TAINT_KEY="tier"
 INFRA_TAINT_VALUE="infra"
 INFRA_TAINT_EFFECT="NoSchedule"
 INFRA_NODE_LABEL="infra"
@@ -54,10 +54,10 @@ INFRA_TOLERATIONS=(
 )
 
 INFRA_NODESELECTORS=(
-  --set "server.nodeSelector.workload=${INFRA_NODE_LABEL}"
-  --set "controller.nodeSelector.workload=${INFRA_NODE_LABEL}"
-  --set "repoServer.nodeSelector.workload=${INFRA_NODE_LABEL}"
-  --set "applicationsetController.nodeSelector.workload=${INFRA_NODE_LABEL}"
+  --set "server.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "controller.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "repoServer.nodeSelector.tier=${INFRA_NODE_LABEL}"
+  --set "applicationsetController.nodeSelector.tier=${INFRA_NODE_LABEL}"
 )
 
 success "Installing/upgrading ArgoCD to v${ARGOCD_HELM_VERSION}..."

@@ -9,22 +9,26 @@ node_shape          = "VM.Standard.A1.Flex"
 node_port           = 30443
 
 # ============================================================
-# Two-pool node layout
-# Node 1 (infra):      1 OCPU  / 8 GB  — taint workload=infra:NoSchedule
-# Node 2 (functional): 3 OCPUs / 16 GB — no taint
+# tenant-b has NO infra node — fully managed by tenant-a's ArgoCD.
+# The infra pool is omitted from the OKE cluster entirely.
 # ============================================================
-infra_node_count        = 1
-infra_node_ocpus        = 1
-infra_node_memory_in_gb = 8
+create_infra_pool = false
 
-functional_node_count        = 1
-functional_node_ocpus        = 3
-functional_node_memory_in_gb = 16
+# ============================================================
+# Functional pool: 2 nodes, 2 OCPUs / 12 GB each
+# ============================================================
+workload_node_count        = 2
+workload_node_ocpus        = 2
+workload_node_memory_in_gb = 12
 
-# Taint defaults match the module; uncomment to override.
-# infra_node_taint_key    = "workload"
-# infra_node_taint_value  = "infra"
-# infra_node_taint_effect = "NoSchedule"
+# Taint defaults are not used (no infra pool); uncomment to override
+# if create_infra_pool is ever flipped back to true.
+# infra_node_count             = 1
+# infra_node_ocpus             = 1
+# infra_node_memory_in_gb      = 8
+# infra_node_taint_key         = "tier"
+# infra_node_taint_value       = "infra"
+# infra_node_taint_effect      = "NoSchedule"
 
 # Network security - restrict NLB and API access to specific CIDR blocks
 # For production, replace with specific office/VPN CIDR blocks

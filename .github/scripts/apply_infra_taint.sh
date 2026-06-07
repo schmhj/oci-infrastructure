@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
 # Apply the infra node taint and patch OKE-managed DaemonSets (kube-proxy,
-# vpc-cni) to tolerate it. The taint repels functional apps; the patches
+# vpc-cni) to tolerate it. The taint repels workload apps; the patches
 # keep the cluster's networking plugins running on the infra node.
 #
 # Required env:
 #   INFRA_NODE_NAME  - Kubernetes node name of the infra-pool node.
+#                      May be empty when the cluster has create_infra_pool = false;
+#                      the script then exits 0 without doing any kubectl work.
 #   TAINT            - Taint spec in the form "key=value:effect"
-#                      (e.g., "workload=infra:NoSchedule").
+#                      (e.g., "tier=infra:NoSchedule"). Unused when
+#                      INFRA_NODE_NAME is empty.
 #
 # Idempotent: safe to re-run on every CI apply. --overwrite=true updates
 # the existing taint in place; toleration patches skip if already present.
@@ -18,8 +21,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
+# No infra node (cluster has create_infra_pool = false, or the pool is
+# empty). Nothing to taint; DaemonSets run on untainted workload nodes
+# and don't need patching. Exit cleanly. Must run before any require_env /
+# require_cmd so tenant-b's first deploy doesn't fail on missing kubectl
+# or an unset TAINT.
+if [[ -z "${INFRA_NODE_NAME:-}" ]]; then
+  warn "INFRA_NODE_NAME is empty (cluster has no infra pool); skipping taint + DaemonSet patches"
+  exit 0
+fi
+
 require_cmd "kubectl"
-require_env "INFRA_NODE_NAME"
 require_env "TAINT"
 
 # Sanity: taint spec must look like key=value:effect

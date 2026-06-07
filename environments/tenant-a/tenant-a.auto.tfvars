@@ -10,19 +10,19 @@ node_port           = 30443
 
 # ============================================================
 # Two-pool node layout
-# Node 1 (infra):      1 OCPU  / 8 GB  — taint workload=infra:NoSchedule
-# Node 2 (functional): 3 OCPUs / 16 GB — no taint
+# Node 1 (infra):    1 OCPU  / 8 GB  — taint tier=infra:NoSchedule
+# Node 2 (workload): 3 OCPUs / 16 GB — no taint
 # ============================================================
 infra_node_count        = 1
 infra_node_ocpus        = 1
 infra_node_memory_in_gb = 8
 
-functional_node_count        = 1
-functional_node_ocpus        = 3
-functional_node_memory_in_gb = 16
+workload_node_count        = 1
+workload_node_ocpus        = 3
+workload_node_memory_in_gb = 16
 
 # Taint defaults match the module; uncomment to override.
-# infra_node_taint_key    = "workload"
+# infra_node_taint_key    = "tier"
 # infra_node_taint_value  = "infra"
 # infra_node_taint_effect = "NoSchedule"
 

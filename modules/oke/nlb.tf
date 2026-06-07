@@ -1,6 +1,6 @@
 # Network Load Balancer
 # Routes external HTTPS traffic to ArgoCD service on worker nodes.
-# Two node pools exist (infra, functional), each with one node.
+# Two node pools exist (infra, workload), each with one node.
 # The NLB backends are flattened: one backend per node, regardless of pool.
 resource "oci_network_load_balancer_network_load_balancer" "nlb" {
   compartment_id = var.compartment_id
@@ -27,27 +27,40 @@ resource "oci_network_load_balancer_backend_set" "nlb_backend_set" {
 }
 
 # Backend pool members (worker nodes from both pools)
-# One backend per node; flattened across the infra and functional pools.
+# One backend per node; flattened across the infra and workload pools.
 # `count` is driven by the pool size variables (not by `length(data...nodes)`)
 # because Terraform cannot determine the data-source's list size at plan time.
 resource "oci_network_load_balancer_backend" "nlb_backend_infra" {
-  count                    = var.infra_node_count
+  count                    = var.create_infra_pool ? var.infra_node_count : 0
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = var.node_port
-  target_id                = data.oci_containerengine_node_pool.np_infra.nodes[count.index].id
+  target_id                = var.create_infra_pool ? data.oci_containerengine_node_pool.np_infra[0].nodes[count.index].id : ""
 
   depends_on = [data.oci_containerengine_node_pool.np_infra]
 }
 
-resource "oci_network_load_balancer_backend" "nlb_backend_functional" {
-  count                    = var.functional_node_count
+resource "oci_network_load_balancer_backend" "nlb_backend_workload" {
+  count                    = var.workload_node_count
   backend_set_name         = oci_network_load_balancer_backend_set.nlb_backend_set.name
   network_load_balancer_id = oci_network_load_balancer_network_load_balancer.nlb.id
   port                     = var.node_port
-  target_id                = data.oci_containerengine_node_pool.np_functional.nodes[count.index].id
+  target_id                = data.oci_containerengine_node_pool.np_workload.nodes[count.index].id
 
-  depends_on = [data.oci_containerengine_node_pool.np_functional]
+  depends_on = [data.oci_containerengine_node_pool.np_workload]
+}
+
+# State migration: see modules/oke/oke.tf. Index [0] is always present;
+# [1] is present only when workload_node_count >= 2 (tenant-b). Extra
+# `moved` entries for non-existent indices are harmless no-ops.
+moved {
+  from = oci_network_load_balancer_backend.nlb_backend_functional[0]
+  to   = oci_network_load_balancer_backend.nlb_backend_workload[0]
+}
+
+moved {
+  from = oci_network_load_balancer_backend.nlb_backend_functional[1]
+  to   = oci_network_load_balancer_backend.nlb_backend_workload[1]
 }
 
 # Listener for incoming HTTPS traffic (port 443)

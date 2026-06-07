@@ -75,6 +75,12 @@ variable "infra_node_count" {
   default     = 1
 }
 
+variable "create_infra_pool" {
+  description = "Whether to create the infra node pool. Set to false for clusters that only run workload apps (e.g., tenant-b). When false, the infra pool resource, its data source, the infra NLB backends, and the taint step are all skipped."
+  type        = bool
+  default     = true
+}
+
 variable "infra_node_ocpus" {
   description = "OCPUs per infra node."
   type        = number
@@ -88,15 +94,15 @@ variable "infra_node_memory_in_gb" {
 }
 
 variable "infra_node_label_value" {
-  description = "Value of the workload= label applied to infra nodes. Functional apps nodeSelector this value."
+  description = "Value of the tier= label applied to infra nodes."
   type        = string
   default     = "infra"
 }
 
 variable "infra_node_taint_key" {
-  description = "Taint key applied to infra nodes to repel functional apps."
+  description = "Taint key applied to infra nodes to repel workload apps."
   type        = string
-  default     = "workload"
+  default     = "tier"
 }
 
 variable "infra_node_taint_value" {
@@ -117,30 +123,30 @@ variable "infra_node_taint_effect" {
 }
 
 # ============================================================
-# Functional node pool (Node 2) — larger, hosts business/functional apps
+# Workload node pool (Node 2) — larger, hosts business/workload apps
 # ============================================================
-variable "functional_node_count" {
-  description = "Number of nodes in the functional node pool."
+variable "workload_node_count" {
+  description = "Number of nodes in the workload node pool."
   type        = number
   default     = 1
 }
 
-variable "functional_node_ocpus" {
-  description = "OCPUs per functional node."
+variable "workload_node_ocpus" {
+  description = "OCPUs per workload node."
   type        = number
   default     = 3
 }
 
-variable "functional_node_memory_in_gb" {
-  description = "Memory (GB) per functional node."
+variable "workload_node_memory_in_gb" {
+  description = "Memory (GB) per workload node."
   type        = number
   default     = 16
 }
 
-variable "functional_node_label_value" {
-  description = "Value of the workload= label applied to functional nodes. Functional apps nodeSelector this value."
+variable "workload_node_label_value" {
+  description = "Value of the tier= label applied to workload nodes. Workload apps nodeSelector this value."
   type        = string
-  default     = "functional"
+  default     = "workload"
 }
 
 variable "node_port" {
