@@ -261,8 +261,9 @@ jobs:
 
       - name: Setup TLS Secret
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         env:
           SECRETS_PRIVATE_KEY: ${{ secrets.TLS_KEY_PEM }}
           SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
@@ -279,8 +280,9 @@ jobs:
 
       - name: Apply infra node taint
         if: |
-          steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true'
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         env:
           INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
           TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
@@ -410,11 +412,15 @@ jobs:
 
       - name: Apply AppProjects App
         if: matrix.bootstrap_mode == 'full'
-        run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/appprojects-app.yaml
+        run: kubectl apply -f bootstrap/prod/tenant-a/appprojects-app.yaml
 
-      - name: Apply Root App
+      - name: Apply Root App (tenant-a)
         if: matrix.bootstrap_mode == 'full'
-        run: kubectl apply -f bootstrap/prod/${{ matrix.env }}/root-app.yaml
+        run: kubectl apply -f bootstrap/prod/tenant-a/root-app.yaml
+
+      - name: Apply Root App (tenant-b)
+        if: matrix.bootstrap_mode == 'full'
+        run: kubectl apply -f bootstrap/prod/tenant-b/root-app.yaml
 
       - name: Bootstrap Summary
         if: |
@@ -423,8 +429,9 @@ jobs:
         run: |
           echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅  AppProjects app deployed" >> $GITHUB_STEP_SUMMARY
-          echo "✅  Root app deployed" >> $GITHUB_STEP_SUMMARY
+          echo "✅  AppProjects app deployed (shared)" >> $GITHUB_STEP_SUMMARY
+          echo "✅  Root app deployed for tenant-a" >> $GITHUB_STEP_SUMMARY
+          echo "✅  Root app deployed for tenant-b" >> $GITHUB_STEP_SUMMARY
 
       - name: Clean up
         if: always()
