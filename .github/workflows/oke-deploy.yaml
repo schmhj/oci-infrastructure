@@ -360,6 +360,17 @@ jobs:
         run: |
           ./.github/scripts/argocd_patch.sh
 
+      - name: Patch ArgoCD tolerations and nodeSelector
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
+        env:
+          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
+          TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
+        run: |
+          ./.github/scripts/argocd_toleration_patch.sh
+
       - name: K8s Setup Summary
         if: |
           success() &&
@@ -381,8 +392,7 @@ jobs:
       - name: Upload cluster registration artifact
         if: |
           always() &&
-          matrix.bootstrap_mode == 'tenant-b-bootstrap' &&
-          steps.cluster_registration.outputs.manifest != ''
+          matrix.bootstrap_mode == 'tenant-b-bootstrap'
         uses: actions/upload-artifact@v4
         with:
           name: cluster-registration-${{ matrix.env }}

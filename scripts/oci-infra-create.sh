@@ -26,6 +26,10 @@ case "$PROFILE" in
 esac
 
 export OCI_CLI_PROFILE=$(echo "$PROFILE" | tr 'a-z-' 'A-Z_')
+
+echo "PROFILE: $OCI_CLI_PROFILE"
+echo "CLUSTER_OCID: $CLUSTER_OCID"
+
 oci ce cluster create-kubeconfig \
   --cluster-id "$CLUSTER_OCID" \
   --file ~/.kube/${PROFILE}-config \
