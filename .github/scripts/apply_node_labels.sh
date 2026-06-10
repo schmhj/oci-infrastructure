@@ -47,7 +47,7 @@ list_pool_nodes() {
   if [[ -z "$result" || "$result" == "[]" ]]; then
     return 0
   fi
-  printf '%s\n' "$result" | jq -r '.[] | "\(.["index"])\t\(.["private-ip"])"' | sort -t$'\t' -k1 -n
+  printf '%s\n' "$result" | jq -r '.[] | "\(.[0])\t\(.[1])"' | sort -t$'\t' -k1 -n
 }
 
 # Build a mapping of private_ip → k8s_node_name using parallel arrays.
