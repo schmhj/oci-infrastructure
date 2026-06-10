@@ -72,10 +72,16 @@ jobs:
       nlb_public_ip_tenant-a: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-a }}
       infra_node_label_tenant-a: ${{ steps.get_cluster_id.outputs.infra_node_label_tenant-a }}
       infra_taint_tenant-a: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-a }}
+      infra_pool_ocid_tenant-a: ${{ steps.get_cluster_id.outputs.infra_pool_ocid_tenant-a }}
+      workload_pool_ocid_tenant-a: ${{ steps.get_cluster_id.outputs.workload_pool_ocid_tenant-a }}
+      workload_node_label_tenant-a: ${{ steps.get_cluster_id.outputs.workload_node_label_tenant-a }}
       cluster_id_tenant-b:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-b }}
       nlb_public_ip_tenant-b: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-b }}
       infra_node_label_tenant-b: ${{ steps.get_cluster_id.outputs.infra_node_label_tenant-b }}
       infra_taint_tenant-b: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-b }}
+      infra_pool_ocid_tenant-b: ${{ steps.get_cluster_id.outputs.infra_pool_ocid_tenant-b }}
+      workload_pool_ocid_tenant-b: ${{ steps.get_cluster_id.outputs.workload_pool_ocid_tenant-b }}
+      workload_node_label_tenant-b: ${{ steps.get_cluster_id.outputs.workload_node_label_tenant-b }}
 
     steps:
       - name: Checkout
@@ -164,12 +170,18 @@ jobs:
           NLB_PUBLIC_IP=$(terraform output -raw nlb_public_ip)
           INFRA_NODE_LABEL=$(terraform output -raw infra_node_label)
           INFRA_TAINT=$(terraform output -raw infra_taint)
+          INFRA_POOL_OCID=$(terraform output -raw infra_node_pool_id)
+          WORKLOAD_POOL_OCID=$(terraform output -raw workload_node_pool_id)
+          WORKLOAD_NODE_LABEL=$(terraform output -raw workload_node_label)
           ENV="${{ matrix.env }}"
 
           echo "cluster_id_${ENV}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
           echo "nlb_public_ip_${ENV}=${NLB_PUBLIC_IP}" >> $GITHUB_OUTPUT
           echo "infra_node_label_${ENV}=${INFRA_NODE_LABEL}" >> $GITHUB_OUTPUT
           echo "infra_taint_${ENV}=${INFRA_TAINT}"   >> $GITHUB_OUTPUT
+          echo "infra_pool_ocid_${ENV}=${INFRA_POOL_OCID}" >> $GITHUB_OUTPUT
+          echo "workload_pool_ocid_${ENV}=${WORKLOAD_POOL_OCID}" >> $GITHUB_OUTPUT
+          echo "workload_node_label_${ENV}=${WORKLOAD_NODE_LABEL}" >> $GITHUB_OUTPUT
 
       - name: Job Summary
         if: always()
@@ -203,6 +215,9 @@ jobs:
             working_dir: environments/tenant-a
             cluster_id_key: cluster_id_tenant-a
             nlb_public_ip_key: nlb_public_ip_tenant-a
+            infra_pool_ocid_key: infra_pool_ocid_tenant-a
+            workload_pool_ocid_key: workload_pool_ocid_tenant-a
+            workload_node_label_key: workload_node_label_tenant-a
             bootstrap_mode: full
           - env: tenant-b
             region: us-ashburn-1
@@ -210,6 +225,9 @@ jobs:
             working_dir: environments/tenant-b
             cluster_id_key: cluster_id_tenant-b
             nlb_public_ip_key: nlb_public_ip_tenant-b
+            infra_pool_ocid_key: infra_pool_ocid_tenant-b
+            workload_pool_ocid_key: workload_pool_ocid_tenant-b
+            workload_node_label_key: workload_node_label_tenant-b
             bootstrap_mode: tenant-b-bootstrap
     steps:
       - name: Checkout
@@ -288,6 +306,20 @@ jobs:
           TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
         run: |
           ./.github/scripts/apply_infra_taint.sh
+
+      - name: Apply per-node labels
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
+        env:
+          INFRA_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.infra_pool_ocid_key] }}
+          WORKLOAD_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_pool_ocid_key] }}
+          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
+          WORKLOAD_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_node_label_key] }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+        run: |
+          ./.github/scripts/apply_node_labels.sh
 
       - name: Start Argocd
         if: |
