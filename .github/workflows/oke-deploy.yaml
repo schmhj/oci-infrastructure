@@ -425,6 +425,8 @@ jobs:
       - name: Upload cluster registration artifact
         if: |
           always() &&
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
           matrix.bootstrap_mode == 'tenant-b-bootstrap'
         uses: actions/upload-artifact@v4
         with:
@@ -434,7 +436,10 @@ jobs:
           if-no-files-found: error
 
       - name: Checkout cluster-config repo
-        if: matrix.bootstrap_mode == 'full'
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         uses: actions/checkout@v4
         with:
           repository: schmhj/cluster-config
@@ -442,20 +447,31 @@ jobs:
           token: ${{ secrets.GH_PAT_SECRET_ADMIN }}
 
       - name: Apply AppProjects App
-        if: matrix.bootstrap_mode == 'full'
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: kubectl apply -f bootstrap/prod/tenant-a/appprojects-app.yaml
 
       - name: Apply Root App (tenant-a)
-        if: matrix.bootstrap_mode == 'full'
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: kubectl apply -f bootstrap/prod/tenant-a/root-app.yaml
 
       - name: Apply Root App (tenant-b)
-        if: matrix.bootstrap_mode == 'full'
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
+          matrix.bootstrap_mode == 'full'
         run: kubectl apply -f bootstrap/prod/tenant-b/root-app.yaml
 
       - name: Bootstrap Summary
         if: |
           success() &&
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true') &&
           matrix.bootstrap_mode == 'full'
         run: |
           echo "## ArgoCD Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
