@@ -33,6 +33,11 @@ output "infra_node_label" {
   value       = module.oke.infra_node_label
 }
 
+output "workload_node_label" {
+  description = "Value of the tier= label applied to workload-pool nodes (e.g., \"workload\"). Used by the CI labeling step to derive per-node labels."
+  value       = module.oke.workload_node_label
+}
+
 output "workload_node_name" {
   description = "Kubernetes node name of the workload-pool node"
   value       = module.oke.workload_node_name
