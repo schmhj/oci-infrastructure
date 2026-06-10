@@ -288,6 +288,19 @@ jobs:
         run: |
           ./.github/scripts/configure_tls_secret.sh
 
+      - name: Apply per-node labels
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true')
+        env:
+          INFRA_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.infra_pool_ocid_key] }}
+          WORKLOAD_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_pool_ocid_key] }}
+          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
+          WORKLOAD_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_node_label_key] }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+        run: |
+          ./.github/scripts/apply_node_labels.sh
+
       - name : Install ArgoCD and Kubeseal Sealed Secrets
         if: |
           (steps.filter.outputs.run_plan == 'true' ||
@@ -306,20 +319,6 @@ jobs:
           TAINT: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_taint_{0}', matrix.env)] }}
         run: |
           ./.github/scripts/apply_infra_taint.sh
-
-      - name: Apply per-node labels
-        if: |
-          (steps.filter.outputs.run_plan == 'true' ||
-          steps.filter.outputs.run_apply == 'true') &&
-          matrix.bootstrap_mode == 'full'
-        env:
-          INFRA_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.infra_pool_ocid_key] }}
-          WORKLOAD_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_pool_ocid_key] }}
-          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
-          WORKLOAD_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_node_label_key] }}
-          OCI_REGION: ${{ vars.OCI_REGION }}
-        run: |
-          ./.github/scripts/apply_node_labels.sh
 
       - name: Start Argocd
         if: |
