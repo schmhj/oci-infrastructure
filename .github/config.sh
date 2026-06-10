@@ -46,7 +46,7 @@ fail() {
 
 # Success message
 success() {
-  echo "✅ $*"
+  echo "✅ $*" >&2
 }
 
 # Warning message
@@ -71,4 +71,4 @@ require_cmd() {
   fi
 }
 
-success "CI/CD configuration loaded"
+# Sourced silently — no side effects
