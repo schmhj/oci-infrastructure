@@ -31,9 +31,8 @@ locals {
   # the K8s node name in OKE — K8s registers by private IP). When
   # create_infra_pool = false, infra_node_label is "" and the taint
   # script becomes a no-op.
-  infra_node_label    = var.create_infra_pool ? var.infra_node_label_value : ""
-  workload_node_label = var.workload_node_label_value
-  workload_node_name  = data.oci_containerengine_node_pool.np_workload.nodes[0].name
+  infra_node_label   = var.create_infra_pool ? var.infra_node_label_value : ""
+  workload_node_name = data.oci_containerengine_node_pool.np_workload.nodes[0].name
 
   # Composed taint spec (e.g., tier=infra:NoSchedule); passed to
   # apply_infra_taint.sh in CI. Empty when create_infra_pool = false —
