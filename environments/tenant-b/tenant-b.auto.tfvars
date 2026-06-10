@@ -19,7 +19,7 @@ create_infra_pool = false
 # ============================================================
 workload_node_count        = 2
 workload_node_ocpus        = 2
-workload_node_memory_in_gb = 11
+workload_node_memory_in_gb = 12
 
 # Taint defaults are not used (no infra pool); uncomment to override
 # if create_infra_pool is ever flipped back to true.
