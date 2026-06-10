@@ -19,7 +19,7 @@ infra_node_memory_in_gb = 8
 
 workload_node_count        = 1
 workload_node_ocpus        = 3
-workload_node_memory_in_gb = 16
+workload_node_memory_in_gb = 15
 
 # Taint defaults match the module; uncomment to override.
 # infra_node_taint_key    = "tier"
