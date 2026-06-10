@@ -28,29 +28,54 @@ source "$SCRIPT_DIR/config.sh"
 
 require_cmd "kubectl"
 require_cmd "oci"
+require_cmd "jq"
 
 # ── helpers ──────────────────────────────────────────────────────
 
-# Query OCI for nodes in a pool and return "index private_ip" lines.
-# Output is sorted by index so positions are deterministic.
+# Query OCI for nodes in a pool and return "index<tab>private_ip" lines.
+# Uses `oci ce node-pool get` since `list-nodes` is not a valid subcommand.
 list_pool_nodes() {
   local pool_ocid="$1"
-  oci ce node-pool list-nodes \
+  local result
+  result=$(oci ce node-pool get \
     --node-pool-id "$pool_ocid" \
-    --query "data[*].[\"index\",\"private-ip\"]" \
-    --output tsv 2>/dev/null | sort -n
+    --query "data.nodes[*].[index,\"private-ip\"]" \
+    --output json 2>/dev/null) || {
+    warn "OCI CLI query failed for pool '${pool_ocid}'"
+    return 0
+  }
+  if [[ -z "$result" || "$result" == "[]" ]]; then
+    return 0
+  fi
+  printf '%s\n' "$result" | jq -r '.[] | "\(.["index"])\t\(.["private-ip"])"' | sort -t$'\t' -k1 -n
 }
 
-# Build a map of private_ip → k8s_node_name from `kubectl get nodes`.
-declare -A IP_TO_NODE
+# Build a mapping of private_ip → k8s_node_name using parallel arrays.
+# (Associative arrays require bash 4+; parallel arrays are portable.)
+IP_LIST=()
+NODE_LIST=()
 
 build_ip_map() {
   local raw
   raw=$(kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{" "}{.metadata.name}{"\n"}{end}' 2>/dev/null)
   while IFS=' ' read -r ip name; do
     [[ -z "$ip" || -z "$name" ]] && continue
-    IP_TO_NODE["$ip"]="$name"
+    IP_LIST+=("$ip")
+    NODE_LIST+=("$name")
   done <<< "$raw"
+}
+
+# Look up K8s node name by private IP. Returns empty string if not found.
+find_node_by_ip() {
+  local target_ip="$1"
+  local i
+  for ((i = 0; i < ${#IP_LIST[@]}; i++)); do
+    if [[ "${IP_LIST[$i]}" == "$target_ip" ]]; then
+      echo "${NODE_LIST[$i]}"
+      return 0
+    fi
+  done
+  return 1
 }
 
 # Apply label <tier>-<index> to a Kubernetes node.
@@ -74,6 +99,11 @@ label_pool() {
     return 0
   fi
 
+  if [[ -z "$tier" ]]; then
+    warn "Tier label is empty for pool '${pool_ocid}'; skipping"
+    return 0
+  fi
+
   success "Listing nodes in pool '${pool_ocid}' (tier=${tier})..."
   local nodes
   nodes=$(list_pool_nodes "$pool_ocid")
@@ -90,7 +120,8 @@ label_pool() {
   while IFS=$'\t' read -r index private_ip; do
     [[ -z "$index" || -z "$private_ip" ]] && continue
 
-    local k8s_node="${IP_TO_NODE[$private_ip]:-}"
+    local k8s_node
+    k8s_node=$(find_node_by_ip "$private_ip" 2>/dev/null) || true
     if [[ -z "$k8s_node" ]]; then
       warn "No Kubernetes node found for private IP '${private_ip}' (index=${index}); skipping"
       continue
@@ -105,7 +136,7 @@ label_pool() {
 success "Building private-IP → K8s-node map..."
 build_ip_map
 
-node_count=${#IP_TO_NODE[@]}
+node_count=${#IP_LIST[@]}
 if [[ "$node_count" -eq 0 ]]; then
   fail "No Kubernetes nodes found; is kubectl configured?"
 fi

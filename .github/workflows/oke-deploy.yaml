@@ -424,7 +424,7 @@ jobs:
 
       - name: Upload cluster registration artifact
         if: |
-          always() &&
+          success() &&
           (steps.filter.outputs.run_plan == 'true' ||
           steps.filter.outputs.run_apply == 'true') &&
           matrix.bootstrap_mode == 'tenant-b-bootstrap'
