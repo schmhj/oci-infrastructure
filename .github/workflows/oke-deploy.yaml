@@ -74,12 +74,14 @@ jobs:
       infra_taint_tenant-a: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-a }}
       infra_pool_ocid_tenant-a: ${{ steps.get_cluster_id.outputs.infra_pool_ocid_tenant-a }}
       workload_pool_ocid_tenant-a: ${{ steps.get_cluster_id.outputs.workload_pool_ocid_tenant-a }}
+      workload_node_label_tenant-a: ${{ steps.get_cluster_id.outputs.workload_node_label_tenant-a }}
       cluster_id_tenant-b:  ${{ steps.get_cluster_id.outputs.cluster_id_tenant-b }}
       nlb_public_ip_tenant-b: ${{ steps.get_cluster_id.outputs.nlb_public_ip_tenant-b }}
       infra_node_label_tenant-b: ${{ steps.get_cluster_id.outputs.infra_node_label_tenant-b }}
       infra_taint_tenant-b: ${{ steps.get_cluster_id.outputs.infra_taint_tenant-b }}
       infra_pool_ocid_tenant-b: ${{ steps.get_cluster_id.outputs.infra_pool_ocid_tenant-b }}
       workload_pool_ocid_tenant-b: ${{ steps.get_cluster_id.outputs.workload_pool_ocid_tenant-b }}
+      workload_node_label_tenant-b: ${{ steps.get_cluster_id.outputs.workload_node_label_tenant-b }}
 
     steps:
       - name: Checkout
@@ -170,6 +172,7 @@ jobs:
           INFRA_TAINT=$(terraform output -raw infra_taint)
           INFRA_POOL_OCID=$(terraform output -raw infra_node_pool_id)
           WORKLOAD_POOL_OCID=$(terraform output -raw workload_node_pool_id)
+          WORKLOAD_NODE_LABEL=$(terraform output -raw workload_node_label)
           ENV="${{ matrix.env }}"
 
           echo "cluster_id_${ENV}=${CLUSTER_ID}"     >> $GITHUB_OUTPUT
@@ -178,45 +181,7 @@ jobs:
           echo "infra_taint_${ENV}=${INFRA_TAINT}"   >> $GITHUB_OUTPUT
           echo "infra_pool_ocid_${ENV}=${INFRA_POOL_OCID}" >> $GITHUB_OUTPUT
           echo "workload_pool_ocid_${ENV}=${WORKLOAD_POOL_OCID}" >> $GITHUB_OUTPUT
-
-      - name: Install OCI CLI & kubectl
-        if: steps.filter.outputs.run_apply == 'true'
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y python3-pip
-          pip3 --version || true
-          pip3 install --upgrade oci-cli
-
-      - name: Setup OCI credentials
-        if: steps.filter.outputs.run_apply == 'true'
-        env:
-          OCI_TENANCY: ${{ secrets.OCI_TENANCY_OCID }}
-          OCI_USER: ${{ secrets.OCI_USER_OCID }}
-          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
-          OCI_PRIVATE_KEY: ${{ secrets.OCI_PRIVATE_KEY }}
-          OCI_REGION: ${{ vars.OCI_REGION }}
-          DEFAULT_REGION: ${{ vars.OCI_DEFAULT_REGION }}
-        run: |
-          ./.github/scripts/setup_oci_credentials.sh
-
-      - name: Generate Kubeconfig
-        if: steps.filter.outputs.run_apply == 'true'
-        env:
-          CLUSTER_ID: ${{ steps.get_cluster_id.outputs[format('cluster_id_{0}', matrix.env)] }}
-          REGION: ${{ vars.OCI_REGION }}
-        run: |
-          ./.github/scripts/kubeconfig.sh
-
-      - name: Apply per-node labels
-        if: steps.filter.outputs.run_apply == 'true'
-        env:
-          INFRA_POOL_OCID: ${{ steps.get_cluster_id.outputs[format('infra_pool_ocid_{0}', matrix.env)] }}
-          WORKLOAD_POOL_OCID: ${{ steps.get_cluster_id.outputs[format('workload_pool_ocid_{0}', matrix.env)] }}
-          INFRA_NODE_LABEL: ${{ steps.get_cluster_id.outputs[format('infra_node_label_{0}', matrix.env)] }}
-          WORKLOAD_NODE_LABEL: "workload"
-          OCI_REGION: ${{ vars.OCI_REGION }}
-        run: |
-          ./.github/scripts/apply_node_labels.sh
+          echo "workload_node_label_${ENV}=${WORKLOAD_NODE_LABEL}" >> $GITHUB_OUTPUT
 
       - name: Job Summary
         if: always()
@@ -252,6 +217,7 @@ jobs:
             nlb_public_ip_key: nlb_public_ip_tenant-a
             infra_pool_ocid_key: infra_pool_ocid_tenant-a
             workload_pool_ocid_key: workload_pool_ocid_tenant-a
+            workload_node_label_key: workload_node_label_tenant-a
             bootstrap_mode: full
           - env: tenant-b
             region: us-ashburn-1
@@ -261,6 +227,7 @@ jobs:
             nlb_public_ip_key: nlb_public_ip_tenant-b
             infra_pool_ocid_key: infra_pool_ocid_tenant-b
             workload_pool_ocid_key: workload_pool_ocid_tenant-b
+            workload_node_label_key: workload_node_label_tenant-b
             bootstrap_mode: tenant-b-bootstrap
     steps:
       - name: Checkout
@@ -320,6 +287,19 @@ jobs:
           SECRETS_PUBLIC_KEY: ${{ secrets.TLS_CERT_PEM }}
         run: |
           ./.github/scripts/configure_tls_secret.sh
+
+      - name: Apply per-node labels
+        if: |
+          (steps.filter.outputs.run_plan == 'true' ||
+          steps.filter.outputs.run_apply == 'true')
+        env:
+          INFRA_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.infra_pool_ocid_key] }}
+          WORKLOAD_POOL_OCID: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_pool_ocid_key] }}
+          INFRA_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[format('infra_node_label_{0}', matrix.env)] }}
+          WORKLOAD_NODE_LABEL: ${{ fromJson(toJson(needs.oke-deploy.outputs))[matrix.workload_node_label_key] }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+        run: |
+          ./.github/scripts/apply_node_labels.sh
 
       - name : Install ArgoCD and Kubeseal Sealed Secrets
         if: |
