@@ -41,7 +41,7 @@ output "infra_node_label" {
 }
 
 output "workload_node_label" {
-  value       = local.workload_node_label
+  value       = var.workload_node_label_value
   description = "Value of the tier= label applied to workload-pool nodes (e.g., \"workload\"). Used by the CI labeling step to derive per-node labels."
 }
 
