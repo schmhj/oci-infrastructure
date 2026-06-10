@@ -40,11 +40,6 @@ output "infra_node_label" {
   description = "Value of the tier= label applied to infra-pool nodes (e.g., \"infra\"). The CI taint step uses this to discover the K8s node(s) via `kubectl get nodes -l tier=<label>`. Empty when create_infra_pool = false."
 }
 
-output "workload_node_label" {
-  value       = local.workload_node_label
-  description = "Value of the tier= label applied to workload-pool nodes (e.g., \"workload\"). Used by the CI labeling step to derive per-node labels."
-}
-
 output "infra_taint" {
   value       = local.infra_taint
   description = "Taint spec applied to the infra node post-provisioning (e.g., tier=infra:NoSchedule)."
