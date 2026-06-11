@@ -3,9 +3,9 @@
 # Apply per-node labels derived from the node pool index.
 # Label format: <tier>-<index> (e.g., infra-0, workload-0, workload-1)
 #
-# The OCI API returns each node with a pool-level index. This script
-# queries OCI for nodes in each pool, maps them to Kubernetes node names
-# via private IP, and applies the label with kubectl.
+# The OCI API returns each node with a name (e.g., "oke-xxx-0"). The index
+# is extracted from the last segment of the node name. If the name is
+# unavailable, a running count is used instead.
 #
 # Required env:
 #   INFRA_POOL_OCID      - OCID of the infra node pool (empty when
@@ -32,14 +32,28 @@ require_cmd "jq"
 
 # ── helpers ──────────────────────────────────────────────────────
 
-# Query OCI for nodes in a pool and return "index<tab>private_ip" lines.
-# Uses `oci ce node-pool get` since `list-nodes` is not a valid subcommand.
+# Extract index from node name. OCI node names end with a numeric segment
+# (e.g., "oke-xxx-nul5l4eo47q-sspbpsghdzq-0" → "0").
+# Falls back to "unknown" if no trailing number is found.
+extract_index_from_name() {
+  local name="$1"
+  local index
+  index=$(echo "$name" | grep -oE '[0-9]+$' || echo "")
+  if [[ -n "$index" ]]; then
+    echo "$index"
+  else
+    echo ""
+  fi
+}
+
+# Query OCI for nodes in a pool and return "index<tab>private_ip<tab>name" lines.
+# Index is derived from the node name; falls back to running count.
 list_pool_nodes() {
   local pool_ocid="$1"
   local result
   result=$(oci ce node-pool get \
     --node-pool-id "$pool_ocid" \
-    --query "data.nodes[*].[index,\"private-ip\"]" \
+    --query "data.nodes[*].[name,\"private-ip\"]" \
     --output json 2>/dev/null) || {
     warn "OCI CLI query failed for pool '${pool_ocid}'"
     return 0
@@ -47,7 +61,16 @@ list_pool_nodes() {
   if [[ -z "$result" || "$result" == "[]" ]]; then
     return 0
   fi
-  printf '%s\n' "$result" | jq -r '.[] | "\(.[0])\t\(.[1])"' | sort -t$'\t' -k1 -n
+  local count=0
+  printf '%s\n' "$result" | jq -r '.[] | "\(.[0])\t\(.[1])"' | while IFS=$'\t' read -r node_name private_ip; do
+    local index
+    index=$(extract_index_from_name "$node_name")
+    if [[ -z "$index" ]]; then
+      index="$count"
+    fi
+    count=$((count + 1))
+    printf '%s\t%s\t%s\n' "$index" "$private_ip" "$node_name"
+  done
 }
 
 # Build a mapping of private_ip → k8s_node_name using parallel arrays.
@@ -85,8 +108,8 @@ label_node() {
   local node_name="$3"
   local label="${tier}-${index}"
 
-  kubectl label node "$node_name" "${label}=" --overwrite >/dev/null
-  success "Labeled node '${node_name}' with '${label}'"
+  kubectl label node "$node_name" "${tier}=${label}" --overwrite >/dev/null
+  success "Labeled node '${node_name}' with '${tier}=${label}'"
 }
 
 # Process a single pool: query OCI, map to K8s, apply labels.
@@ -117,13 +140,13 @@ label_pool() {
   count=$(printf '%s' "$nodes" | grep -c . || true)
   success "Found ${count} node(s) in pool (tier=${tier})"
 
-  while IFS=$'\t' read -r index private_ip; do
+  while IFS=$'\t' read -r index private_ip oci_name; do
     [[ -z "$index" || -z "$private_ip" ]] && continue
 
     local k8s_node
     k8s_node=$(find_node_by_ip "$private_ip" 2>/dev/null) || true
     if [[ -z "$k8s_node" ]]; then
-      warn "No Kubernetes node found for private IP '${private_ip}' (index=${index}); skipping"
+      warn "No Kubernetes node found for private IP '${private_ip}' (oci_name=${oci_name}); skipping"
       continue
     fi
 
