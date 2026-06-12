@@ -251,6 +251,8 @@ nlb_allowed_cidr_blocks = ["0.0.0.0/0"]  # Restrict for production
 
 ## OCI Infrastructure
 
+![OCI Architecture Diagram](docs/assets/multi-tenant-oci.png)
+
 ### Infrastructure Components
 
 #### 1. **Virtual Cloud Network (VCN)**
