@@ -30,11 +30,14 @@ workload_node_memory_in_gb = 16
 # For production, replace with specific office/VPN CIDR blocks
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 
-# Cross-tenant pod communication (optional, via DRG)
-# Uncomment and set these to enable cross-tenant pod communication
-# enable_drg = true
-# drg_id = "ocid1.drg.oc1.iad..."  # Shared DRG ID
-# peer_tenant_pods_cidr = "10.2.244.0/22"  # tenant-b pods CIDR
+# ============================================================
+# VCN Peering — tenant-a is the ACCEPTOR
+# Creates LPG but does NOT initiate the connection.
+# tenant-b (requestor) will connect using this LPG's OCID.
+# Requires IAM policies in both tenancies (see VCN_PEERING.md).
+# ============================================================
+enable_vcn_peering = true
+peer_vcn_cidr      = "10.2.0.0/16"  # tenant-b's VCN CIDR
 
 tags = {
   "environment" = "production"

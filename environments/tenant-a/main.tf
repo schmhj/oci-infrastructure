@@ -34,4 +34,8 @@ module "oke" {
 
   tags                    = var.tags
   nlb_allowed_cidr_blocks = var.nlb_allowed_cidr_blocks
+
+  # VCN Peering (acceptor side — creates LPG, does NOT initiate connection)
+  enable_vcn_peering = var.enable_vcn_peering
+  peer_vcn_cidr      = var.peer_vcn_cidr
 }

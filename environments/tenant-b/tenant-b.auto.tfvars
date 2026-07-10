@@ -3,6 +3,10 @@ region       = "us-ashburn-1"
 cluster_name = "oke-prod-tenant-b"
 vcn_cidr     = "10.2.0.0/16"
 
+# Pod CIDR changed from 10.244.0.0/16 to avoid overlap with tenant-a
+# (required for VCN peering to work correctly)
+pods_cidr = "10.245.0.0/16"
+
 availability_domain = "mMVr:US-ASHBURN-1-AD-1"
 kubernetes_version  = "v1.36.0"
 node_shape          = "VM.Standard.A1.Flex"
@@ -34,11 +38,17 @@ workload_node_memory_in_gb = 12
 # For production, replace with specific office/VPN CIDR blocks
 nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 
-# Cross-tenant pod communication (optional, via DRG)
-# Uncomment and set these to enable cross-tenant pod communication
-# enable_drg = true
-# drg_id = "ocid1.drg.oc1.iad..."  # Shared DRG ID
-# peer_tenant_pods_cidr = "10.1.244.0/22"  # tenant-a pods CIDR
+# ============================================================
+# VCN Peering — tenant-b is the REQUESTOR
+# Creates LPG AND initiates connection to tenant-a's LPG.
+# peer_lpg_ocid and peer_tenancy_id come from TFC workspace
+# variables (sensitive, not committed to git).
+# Requires IAM policies in both tenancies (see VCN_PEERING.md).
+# ============================================================
+enable_vcn_peering = true
+peer_vcn_cidr      = "10.1.0.0/16"  # tenant-a's VCN CIDR
+# peer_lpg_ocid   = set in TFC workspace variables
+# peer_tenancy_id = set in TFC workspace variables
 
 tags = {
   "environment" = "production"

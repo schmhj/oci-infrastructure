@@ -36,4 +36,10 @@ module "oke" {
 
   tags                    = var.tags
   nlb_allowed_cidr_blocks = var.nlb_allowed_cidr_blocks
+
+  # VCN Peering (requestor side — creates LPG AND initiates connection to tenant-a)
+  enable_vcn_peering = var.enable_vcn_peering
+  peer_lpg_ocid      = var.peer_lpg_ocid
+  peer_vcn_cidr      = var.peer_vcn_cidr
+  peer_tenancy_id    = var.peer_tenancy_id
 }

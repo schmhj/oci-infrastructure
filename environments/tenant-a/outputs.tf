@@ -58,3 +58,8 @@ output "kubeconfig_content" {
   value       = module.oke.kubeconfig_content
   sensitive   = true
 }
+
+output "lpg_ocid" {
+  description = "LPG OCID for cross-tenancy peering (pass to tenant-b as peer_lpg_ocid)"
+  value       = module.oke.lpg_ocid
+}
