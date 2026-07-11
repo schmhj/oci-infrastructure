@@ -155,3 +155,16 @@ variable "nlb_allowed_cidr_blocks" {
     error_message = "nlb_allowed_cidr_blocks must contain at least one CIDR block. Use [\"0.0.0.0/0\"] to allow all traffic (not recommended for production)."
   }
 }
+
+# VCN Peering variables (acceptor side)
+variable "enable_vcn_peering" {
+  description = "Enable Local Peering Gateway for cross-tenancy VCN peering"
+  type        = bool
+  default     = false
+}
+
+variable "peer_vcn_cidr" {
+  description = "CIDR block of the peer VCN (requestor) for routing"
+  type        = string
+  default     = null
+}

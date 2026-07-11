@@ -26,6 +26,56 @@ resource "oci_core_drg_attachment" "vcn_attachment" {
   display_name  = "${local.name_vcn}-drg-attachment"
 }
 
+# ============================================================
+# Local Peering Gateway (LPG) — cross-tenancy VCN peering
+# Free tier: no additional charges for LPG or peered traffic
+# The requestor sets peer_id to establish the connection.
+# The acceptor creates the LPG without peer_id.
+# ============================================================
+resource "oci_core_local_peering_gateway" "vcn_lpg" {
+  count          = var.enable_vcn_peering ? 1 : 0
+  compartment_id = var.compartment_id
+  vcn_id         = module.vcn.vcn_id
+  display_name   = "${local.name_vcn}-lpg"
+  peer_id        = var.peer_lpg_ocid
+}
+
+# Data source for Oracle services (used by service gateway route)
+data "oci_core_services" "all_oci_services" {
+  filter {
+    name   = "name"
+    values = ["All .* Services In Oracle Services Network"]
+    regex  = true
+  }
+}
+
+# Private subnet route table with LPG peering route
+# Only created when VCN peering is enabled; replaces the default NAT route table
+resource "oci_core_route_table" "private_subnet_rt_with_lpg" {
+  count          = var.enable_vcn_peering ? 1 : 0
+  compartment_id = var.compartment_id
+  vcn_id         = module.vcn.vcn_id
+  display_name   = "${local.name_vcn}-private-rt-lpg"
+
+  route_rules {
+    destination       = "0.0.0.0/0"
+    destination_type  = "CIDR_BLOCK"
+    network_entity_id = module.vcn.nat_gateway_id
+  }
+
+  route_rules {
+    destination       = lookup(data.oci_core_services.all_oci_services.services[0], "cidr_block")
+    destination_type  = "SERVICE_CIDR_BLOCK"
+    network_entity_id = module.vcn.service_gateway_id
+  }
+
+  route_rules {
+    destination       = var.peer_vcn_cidr
+    destination_type  = "CIDR_BLOCK"
+    network_entity_id = oci_core_local_peering_gateway.vcn_lpg[0].id
+  }
+}
+
 resource "oci_core_security_list" "private_subnet_sl" {
   compartment_id = var.compartment_id
   vcn_id         = module.vcn.vcn_id
@@ -65,6 +115,17 @@ resource "oci_core_security_list" "private_subnet_sl" {
     tcp_options {
       min = 30443
       max = 30443
+    }
+  }
+
+  # Allow all traffic from peer VCN (when peering is enabled)
+  dynamic "ingress_security_rules" {
+    for_each = var.enable_vcn_peering ? [var.peer_vcn_cidr] : []
+    content {
+      stateless   = false
+      source      = ingress_security_rules.value
+      source_type = "CIDR_BLOCK"
+      protocol    = "all"
     }
   }
 }
@@ -143,6 +204,17 @@ resource "oci_core_security_list" "public_subnet_sl" {
       }
     }
   }
+
+  # Allow all traffic from peer VCN (when peering is enabled)
+  dynamic "ingress_security_rules" {
+    for_each = var.enable_vcn_peering ? [var.peer_vcn_cidr] : []
+    content {
+      stateless   = false
+      source      = ingress_security_rules.value
+      source_type = "CIDR_BLOCK"
+      protocol    = "all"
+    }
+  }
 }
 
 resource "oci_core_subnet" "vcn_private_subnet" {
@@ -150,7 +222,7 @@ resource "oci_core_subnet" "vcn_private_subnet" {
   vcn_id         = module.vcn.vcn_id
   cidr_block     = local.private_subnet_cidr
 
-  route_table_id             = module.vcn.nat_route_id
+  route_table_id             = var.enable_vcn_peering ? oci_core_route_table.private_subnet_rt_with_lpg[0].id : module.vcn.nat_route_id
   security_list_ids          = [oci_core_security_list.private_subnet_sl.id]
   display_name               = local.name_snet_priv
   prohibit_public_ip_on_vnic = true

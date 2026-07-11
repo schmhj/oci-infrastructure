@@ -60,3 +60,8 @@ output "kubeconfig_content" {
   description = "Raw kubeconfig content from OCI"
   sensitive   = true
 }
+
+output "lpg_ocid" {
+  value       = var.enable_vcn_peering ? oci_core_local_peering_gateway.vcn_lpg[0].id : ""
+  description = "Local Peering Gateway OCID (for cross-tenancy peering). Empty when enable_vcn_peering = false."
+}

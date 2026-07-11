@@ -50,7 +50,7 @@ resource "oci_containerengine_cluster" "oke" {
     }
 
     kubernetes_network_config {
-      pods_cidr     = "10.244.0.0/16"
+      pods_cidr     = var.pods_cidr
       services_cidr = "10.96.0.0/16"
     }
   }

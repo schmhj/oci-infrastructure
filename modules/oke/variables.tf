@@ -55,6 +55,12 @@ variable "vcn_cidr" {
   type        = string
 }
 
+variable "pods_cidr" {
+  description = "CIDR block for Kubernetes pods. Must not overlap with the peer VCN's pod CIDR when VCN peering is enabled."
+  type        = string
+  default     = "10.244.0.0/16"
+}
+
 variable "availability_domain" {
   description = "The availability domain where the cluster will be created."
   type        = string
@@ -178,6 +184,25 @@ variable "allowed_egress_cidrs" {
   description = "CIDR blocks allowed for egress when enable_strict_egress is true"
   type        = list(string)
   default     = ["0.0.0.0/0"]
+}
+
+# VCN Peering variables (cross-tenancy LPG)
+variable "enable_vcn_peering" {
+  description = "Enable Local Peering Gateway for cross-tenancy VCN peering (same region, free tier)"
+  type        = bool
+  default     = false
+}
+
+variable "peer_lpg_ocid" {
+  description = "OCID of the peer's Local Peering Gateway. Required on the requestor side when enable_vcn_peering = true."
+  type        = string
+  default     = null
+}
+
+variable "peer_vcn_cidr" {
+  description = "CIDR block of the peer VCN for routing (e.g., '10.1.0.0/16'). Required when enable_vcn_peering = true."
+  type        = string
+  default     = null
 }
 
 # Multi-region networking variables
