@@ -174,9 +174,3 @@ variable "peer_vcn_cidr" {
   type        = string
   default     = null
 }
-
-variable "peer_tenancy_id" {
-  description = "OCID of the peer tenancy (tenant-a). Required for cross-tenancy peering."
-  type        = string
-  default     = null
-}

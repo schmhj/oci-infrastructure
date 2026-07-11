@@ -41,5 +41,4 @@ module "oke" {
   enable_vcn_peering = var.enable_vcn_peering
   peer_lpg_ocid      = var.peer_lpg_ocid
   peer_vcn_cidr      = var.peer_vcn_cidr
-  peer_tenancy_id    = var.peer_tenancy_id
 }

@@ -29,22 +29,15 @@ resource "oci_core_drg_attachment" "vcn_attachment" {
 # ============================================================
 # Local Peering Gateway (LPG) — cross-tenancy VCN peering
 # Free tier: no additional charges for LPG or peered traffic
+# The requestor sets peer_id to establish the connection.
+# The acceptor creates the LPG without peer_id.
 # ============================================================
 resource "oci_core_local_peering_gateway" "vcn_lpg" {
   count          = var.enable_vcn_peering ? 1 : 0
   compartment_id = var.compartment_id
   vcn_id         = module.vcn.vcn_id
   display_name   = "${local.name_vcn}-lpg"
-}
-
-# Peering connection — requestor side only (when peer_lpg_ocid is provided)
-# The acceptor creates the LPG but does NOT create this resource.
-resource "oci_core_local_peering_connection" "peering" {
-  count                    = var.enable_vcn_peering && var.peer_lpg_ocid != null ? 1 : 0
-  local_peering_gateway_id = oci_core_local_peering_gateway.vcn_lpg[0].id
-  peer_id                  = var.peer_lpg_ocid
-  peer_region_name         = var.region
-  peer_tenancy_id          = var.peer_tenancy_id
+  peer_id        = var.peer_lpg_ocid
 }
 
 # Data source for Oracle services (used by service gateway route)

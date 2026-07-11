@@ -48,7 +48,6 @@ nlb_allowed_cidr_blocks = ["0.0.0.0/0"]
 enable_vcn_peering = true
 peer_vcn_cidr      = "10.1.0.0/16"  # tenant-a's VCN CIDR
 # peer_lpg_ocid   = set in TFC workspace variables
-# peer_tenancy_id = set in TFC workspace variables
 
 tags = {
   "environment" = "production"

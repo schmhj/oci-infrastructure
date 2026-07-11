@@ -205,12 +205,6 @@ variable "peer_vcn_cidr" {
   default     = null
 }
 
-variable "peer_tenancy_id" {
-  description = "OCID of the peer tenancy. Required for cross-tenancy peering when enable_vcn_peering = true."
-  type        = string
-  default     = null
-}
-
 # Multi-region networking variables
 variable "enable_drg" {
   description = "Enable Dynamic Routing Gateway for inter-region peering"
