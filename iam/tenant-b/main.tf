@@ -78,8 +78,9 @@ resource "oci_identity_policy" "endorse_lpg_peering" {
 
   statements = [
     "Define tenancy Acceptor as ${var.acceptor_tenancy_ocid}",
+    "Allow group ${oci_identity_group.lpg_admins.name} to manage local-peering-from in tenancy",
     "Endorse group ${oci_identity_group.lpg_admins.name} to manage local-peering-to in tenancy Acceptor",
-    "Endorse group ${oci_identity_group.lpg_admins.name} to manage local-peering-from in tenancy Acceptor",
+    "Endorse group ${oci_identity_group.lpg_admins.name} to associate local-peering-gateways in tenancy with local-peering-gateways in tenancy Acceptor",
   ]
 }
 

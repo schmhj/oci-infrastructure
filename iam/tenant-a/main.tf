@@ -110,8 +110,9 @@ resource "oci_identity_policy" "admit_requestor_lpg" {
   statements = [
     "Define tenancy Requestor as ${var.requestor_tenancy_ocid}",
     "Define group requestor-admins as ${data.terraform_remote_state.tenant_b.outputs.lpg_admins_group_ocid}",
+    "Allow group lpg-admins to manage local-peering-from in tenancy",
     "Admit group requestor-admins of tenancy Requestor to manage local-peering-to in tenancy",
-    "Admit group requestor-admins of tenancy Requestor to manage local-peering-from in tenancy",
+    "Admit group requestor-admins of tenancy Requestor to associate local-peering-gateways in tenancy Requestor with local-peering-gateways in tenancy",
   ]
 }
 

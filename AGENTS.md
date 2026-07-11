@@ -43,6 +43,7 @@ There is no local testing, linting (`terraform fmt`/`validate`), or pre-commit h
 - **`setup_oci_credentials.sh`** writes the private key to a `.tmp` file first then `mv`s it — prevents consuming a partially written key if the process is interrupted. Uses a `trap` for cleanup.
 - **Node pool scheduling** (`oke-nodepool-schedule.yaml`) uses per-tenant timezones (`America/New_York` for both — both tenants now live in `us-ashburn-1`) with a cron that runs every 15 minutes. Scale-to-zero at 10 PM local, scale-back at 8 AM local. Uses `oci ce node-pool update` directly (not Terraform) for speed.
 - **Destroy workflow requires literal `"DESTROY"`** as input and validates the cluster OCID format (`^ocid1\.cluster\.oc1\..+`) before proceeding. Also checks that the cluster isn't already DELETING/DELETED via OCI CLI.
+- **Cross-tenancy LPG peering requires 3 IAM statements per tenancy** (not 2). The `associate` statement is critical for `ConnectLocalPeeringGateways` API. See [`vcn-peering-implementation.md`](docs/vcn-peering-implementation.md) for the exact policy syntax. Omitting `associate` causes HTTP 404 `NotAuthorizedOrNotFound` on `peer_id` update.
 
 ## Secrets & Environment Variables
 

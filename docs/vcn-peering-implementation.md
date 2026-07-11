@@ -35,19 +35,27 @@ This document describes the implementation of cross-tenancy VCN peering between 
 
 ### IAM Policies
 
-Create these policies in **both** OCI tenancies before running Terraform.
+Create these policies in **both** OCI tenancies before running Terraform. The `associate` statement is critical — it grants the `ConnectLocalPeeringGateways` API permission required to establish the peering connection.
 
-**Acceptor tenancy (tenant-a) — in the compartment containing the VCN:**
+**Requestor tenancy (tenant-b) — in the root compartment:**
 ```
-Allow tenancy <requestor-tenancy-name> to manage local-peering-gateways in compartment <compartment-name>
+Define tenancy Acceptor as <acceptor-tenancy-ocid>
+Define group requestor-admins as <requestor-group-ocid>
+Allow group requestor-admins to manage local-peering-from in tenancy
+Endorse group requestor-admins to manage local-peering-to in tenancy Acceptor
+Endorse group requestor-admins to associate local-peering-gateways in tenancy with local-peering-gateways in tenancy Acceptor
 ```
 
-**Requestor tenancy (tenant-b) — in the compartment containing the VCN:**
+**Acceptor tenancy (tenant-a) — in the root compartment:**
 ```
-Allow tenancy <acceptor-tenancy-name> to manage local-peering-gateways in compartment <compartment-name>
+Define tenancy Requestor as <requestor-tenancy-ocid>
+Define group requestor-admins as <requestor-group-ocid>
+Allow group lpg-admins to manage local-peering-from in tenancy
+Admit group requestor-admins of tenancy Requestor to manage local-peering-to in tenancy
+Admit group requestor-admins of tenancy Requestor to associate local-peering-gateways in tenancy Requestor with local-peering-gateways in tenancy
 ```
 
-Replace `<requestor-tenancy-name>` and `<acceptor-tenancy-name>` with the actual tenancy names, and `<compartment-name>` with the compartment where the VCNs are deployed.
+Replace `<acceptor-tenancy-ocid>`, `<requestor-tenancy-ocid>`, and `<requestor-group-ocid>` with actual values.
 
 ### TFC Workspace Variables (tenant-b)
 
@@ -166,7 +174,7 @@ terraform apply -auto-approve -input=false
 
 ### Peering Connection Fails
 
-- **IAM Policy Error**: Ensure cross-tenancy IAM policies are created in both tenancies
+- **IAM Policy Error**: Ensure cross-tenancy IAM policies are created in both tenancies, including the `associate` statement (required for `ConnectLocalPeeringGateways`)
 - **LPG OCID Mismatch**: Verify `peer_lpg_ocid` matches tenant-a's actual LPG OCID
 - **Region Mismatch**: Both VCNs must be in the same region (`us-ashburn-1`)
 
@@ -192,4 +200,7 @@ Or manually delete the LPGs from the OCI Console.
 
 - [OCI Local VCN Peering using LPGs](https://docs.oracle.com/en-us/iaas/Content/Network/Tasks/localVCNpeering.htm)
 - [OCI IAM Policies for VCN Peering](https://docs.oracle.com/en-us/iaas/Content/Network/Tasks/drg-iam.htm)
+- [OCI Connecting to Another LPG](https://docs.oracle.com/en-us/iaas/Content/Network/Tasks/connect-lpg.htm)
+- [OCI Access Control for LPGs](https://docs.oracle.com/en-us/iaas/Content/Network/Concepts/accesscontrol.htm)
+- [oracle-quickstart Cross-Tenancies Example](https://github.com/oracle-quickstart/oci-arch-cross-tenancies/blob/master/iam.tf)
 - [Terraform OCI Provider — Local Peering Gateway](https://registry.terraform.io/providers/hashicorp/oci/latest/docs/resources/core_local_peering_gateway)
