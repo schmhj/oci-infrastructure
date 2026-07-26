@@ -4,7 +4,7 @@ cluster_name = "oke-prod-tenant-a"
 vcn_cidr     = "10.1.0.0/16"
 
 availability_domain = "mMVr:US-ASHBURN-1-AD-1"
-kubernetes_version  = "v1.36.0"
+kubernetes_version  = "v1.36.1"
 node_shape          = "VM.Standard.A1.Flex"
 node_port           = 30443
 
