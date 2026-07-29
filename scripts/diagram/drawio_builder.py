@@ -163,14 +163,14 @@ def _load_svg(icon_key: str) -> tuple[str, float, float]:
         if vb_m:
             parts = vb_m.group(1).split()
             cur_w, cur_h = float(parts[2]), float(parts[3])
-            new_w = max(cur_w, max_x)
-            new_h = max(cur_h, max_y)
+            new_w = max_x           # shrink dead space, not just expand overflow
+            new_h = max_y
             svg_text = svg_text.replace(
                 f'viewBox="{vb_m.group(1)}"',
                 f'viewBox="0 0 {new_w} {new_h}"')
             # Update width/height attributes to match
-            svg_text = re.sub(r'\bwidth="\d+"', f'width="{int(new_w)}"', svg_text)
-            svg_text = re.sub(r'\bheight="\d+"', f'height="{int(new_h)}"', svg_text)
+            svg_text = re.sub(r'\bwidth="[\d.]+"', f'width="{int(new_w)}"', svg_text)
+            svg_text = re.sub(r'\bheight="[\d.]+"', f'height="{int(new_h)}"', svg_text)
             native_w, native_h = new_w, new_h
 
     if native_w is None:
